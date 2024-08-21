@@ -109,7 +109,6 @@ def get_timing_from_metadata(
     last_job = []
     longest_job = []
     for k, vv in task_md.items():
-        print(k, len(vv))
         start_list = []
         stop_list = []
         duration = []

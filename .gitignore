@@ -1,0 +1,40 @@
+.sconsign.dblite
+config.log
+.sconf_temp
+*.o
+*.os
+*.so
+*.cfgc
+*.pyc
+*_wrap.cc
+*Lib.py
+
+# Pre-commit configs
+.ruff.toml
+.mypy.ini
+.flake8
+.isort.cfg
+
+# Built by sconsUtils
+version.py
+bin/
+
+# Pytest
+tests/.tests
+pytest_session.txt
+.cache/
+.pytest_cache
+.coverage*
+
+# Cython related file
+*.c
+
+# Output directory
+/output/*
+
+# Vscode setting
+.vscode/
+
+# MacOS metadata
+.DS_Store
+.clang-format

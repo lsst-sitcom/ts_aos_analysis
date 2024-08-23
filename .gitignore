@@ -38,3 +38,6 @@ pytest_session.txt
 # MacOS metadata
 .DS_Store
 .clang-format
+
+# Jupyter notebook backups
+notebooks/.ipynb_checkpoints

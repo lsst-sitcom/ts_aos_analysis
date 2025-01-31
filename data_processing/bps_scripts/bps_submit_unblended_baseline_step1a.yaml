@@ -1,7 +1,7 @@
 computeSite: s3df
 pipelineYaml: "$TS_WEP_DIR/pipelines/production/comCamBaselineUSDF_Danish.yaml#step1a"  # if problems, put full path to file
 payload:
-  butlerConfig: "/repo/embargo"
+  butlerConfig: "/repo/main"
   payloadName: "aosBaseline_step1a"
-  inCollection: "LSSTComCam/nightlyValidation"
+  inCollection: "LSSTComCam/defaults"
   dataQuery: "instrument='LSSTComCam' and exposure.observation_type='cwfs'"

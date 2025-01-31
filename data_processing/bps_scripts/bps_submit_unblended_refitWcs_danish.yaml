@@ -1,0 +1,7 @@
+computeSite: s3df
+pipelineYaml: "$TS_WEP_DIR/pipelines/production/comCamRefitWcsUSDF_Danish.yaml#step1b,step2"  # if problems, put full path to file
+payload:
+  butlerConfig: "/repo/main"
+  payloadName: "aosRefitWcs_danish"
+  inCollection: "u/brycek/aosRefitWcs_step1a"
+  dataQuery: "instrument='LSSTComCam' and exposure.observation_type='cwfs'"

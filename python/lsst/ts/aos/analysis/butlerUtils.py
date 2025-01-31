@@ -19,8 +19,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import numpy as np
 from astropy.time import Time
-from lsst.daf.butler import Butler
+from lsst.daf.butler import Butler, DatasetNotFoundError
 from lsst.pipe.base import TaskMetadata
 
 __all__ = ["get_task_metadata", "get_timing_from_metadata"]
@@ -29,8 +30,10 @@ __all__ = ["get_task_metadata", "get_timing_from_metadata"]
 def get_task_metadata(
     butler_path: str,
     collection: str,
+    instrument: str,
     task_list: list[str],
     visit_list: list[int],
+    group_list: list[str],
     detector_list: list[int],
 ) -> dict[str, list[TaskMetadata]]:
     """
@@ -43,10 +46,14 @@ def get_task_metadata(
         Path to butler repository.
     collection: str
         Name of the collection in butler where data is stored.
+    instrument: str
+        Name of the instrument.
     task_list: list(str)
         Name of the tasks from which to retrieve metadata.
     visit_list: list(int)
         Visit Ids to gather from butler.
+    group_list: list(str)
+        List of groups. Same length as visit_list.
     detector_list: list(int)
         Detector Ids.
 
@@ -62,17 +69,22 @@ def get_task_metadata(
 
     for task in task_list:
         task_md = []
-        for visit in visit_list:
+        for visit, group in zip(visit_list, group_list):
             for detector in detector_list:
-                task_md.append(
-                    butler.get(
-                        f"{task}_metadata",
-                        exposure=visit,
-                        visit=visit,
-                        detector=detector,
-                        collections=collection,
+                try:
+                    task_md.append(
+                        butler.get(
+                            f"{task}_metadata",
+                            instrument=instrument,
+                            exposure=visit,
+                            visit=visit,
+                            detector=detector,
+                            collections=collection,
+                            group=group,
+                        )
                     )
-                )
+                except DatasetNotFoundError:
+                    continue
         md[task] = task_md
 
     return md
@@ -113,19 +125,19 @@ def get_timing_from_metadata(
         stop_list = []
         duration = []
         for v in vv:
-            subtask = "quantum"
-            arrs = v[subtask].arrays
+            subtask = 'quantum'
+            arrs = v[subtask]
             # print(arrs)
-            if "startUtc" in arrs:
-                start = min(arrs["prep" + suffix])
-                stop = max(arrs["end" + suffix])
-            elif "runQuantumStartCpuTime" in arrs:
-                start = min(arrs["runQuantumStart" + suffix])
-                stop = max(arrs["runQuantumEnd" + suffix])
+            if 'startUtc' in arrs:
+                start = arrs['prep'+suffix]
+                stop = arrs['end'+suffix]
+            elif 'runQuantumStartCpuTime' in arrs:
+                start = min(arrs['runQuantumStart'+suffix])
+                stop = max(arrs['runQuantumEnd'+suffix])
             else:
                 # Might be empty b/c intra is noop
                 continue
-            jobs.append((list(v.metadata.keys())[0], start, stop))
+            jobs.append([k, start, stop])
             start_list.append(start)
             stop_list.append(stop)
             duration.append((Time(stop[:-6]).mjd - Time(start[:-6]).mjd) * 86400)

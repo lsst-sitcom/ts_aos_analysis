@@ -19,7 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-__all__ = ['add_property', 'build_configuration_schema']
+__all__ = ["add_property", "build_configuration_schema"]
+
 
 def add_property(prop_name: str, prop_details: dict, indent_level: int = 1) -> str:
     """Add a property to a configuration json-formatted schema string.
@@ -38,8 +39,8 @@ def add_property(prop_name: str, prop_details: dict, indent_level: int = 1) -> s
     str
         The formatted property string.
     """
-    indent = '  ' * indent_level
-    schema_str = f'{indent}{prop_name}:\n'
+    indent = "  " * indent_level
+    schema_str = f"{indent}{prop_name}:\n"
     schema_str += f'{indent}  description: {prop_details["description"]}\n'
     schema_str += f'{indent}  type: {prop_details["type"]}\n'
 
@@ -48,11 +49,11 @@ def add_property(prop_name: str, prop_details: dict, indent_level: int = 1) -> s
         default_value = prop_details["default"]
         if prop_details["type"] == "string":
             default_value = f'"{default_value}"'
-        schema_str += f'{indent}  default: {default_value}\n'
+        schema_str += f"{indent}  default: {default_value}\n"
 
     # Handle nested properties for arrays or objects
     if prop_details["type"] == "array" and "items" in prop_details:
-        schema_str += f'{indent}  items:\n'
+        schema_str += f"{indent}  items:\n"
         # Add the array item type without the description
         item_details = prop_details["items"]
         schema_str += f'{indent}    type: {item_details["type"]}\n'
@@ -62,11 +63,12 @@ def add_property(prop_name: str, prop_details: dict, indent_level: int = 1) -> s
             schema_str += f'{indent}    maximum: {item_details["maximum"]}\n'
 
     if prop_details["type"] == "object" and "properties" in prop_details:
-        schema_str += f'{indent}  properties:\n'
+        schema_str += f"{indent}  properties:\n"
         for nested_name, nested_details in prop_details["properties"].items():
             schema_str += add_property(nested_name, nested_details, indent_level + 2)
 
     return schema_str
+
 
 def build_configuration_schema(block_number: int, properties: dict) -> str:
     """
@@ -78,7 +80,8 @@ def build_configuration_schema(block_number: int, properties: dict) -> str:
         The BLOCK number for which the configuration schema is being built.
     properties : dict
         A dictionary with property names as keys and dictionaries as values.
-        The dictionaries should have keys 'description', 'type', and optionally 'default'.
+        The dictionaries should have keys 'description', 'type',
+        and optionally 'default'.
 
     Returns
     -------
@@ -87,11 +90,11 @@ def build_configuration_schema(block_number: int, properties: dict) -> str:
     """
     # Define the base schema with the BLOCK number
     configuration_schema = (
-        '$schema: http://json-schema.org/draft-07/schema#\n'
-        f'title: BLOCK-{block_number} configuration\n'
-        f'description: Configuration for BLOCK-{block_number}.\n'
-        'type: object\n'
-        'properties:\n'
+        "$schema: http://json-schema.org/draft-07/schema#\n"
+        f"title: BLOCK-{block_number} configuration\n"
+        f"description: Configuration for BLOCK-{block_number}.\n"
+        "type: object\n"
+        "properties:\n"
     )
 
     # Add each property to the schema

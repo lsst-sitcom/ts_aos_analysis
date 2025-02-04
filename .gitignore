@@ -41,3 +41,5 @@ pytest_session.txt
 
 # Jupyter notebook backups
 **/.ipynb_checkpoints/
+.pre-commit-config.yaml
+towncrier.toml

@@ -19,12 +19,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import numpy as np
+from astropy.time import Time
 from lsst.daf.butler import Butler
 from lsst.pipe.base import TaskMetadata
-from astropy.time import Time
 
-__all__ = ['get_task_metadata', 'get_timing_from_metadata']
+__all__ = ["get_task_metadata", "get_timing_from_metadata"]
+
 
 def get_task_metadata(
     butler_path: str,
@@ -103,7 +103,7 @@ def get_timing_from_metadata(
     list
         Longest duration for a single process of a type of task
     """
-    suffix = 'Utc'
+    suffix = "Utc"
     jobs = []
     first_job = []
     last_job = []
@@ -113,15 +113,15 @@ def get_timing_from_metadata(
         stop_list = []
         duration = []
         for v in vv:
-            subtask = 'quantum'
+            subtask = "quantum"
             arrs = v[subtask].arrays
             # print(arrs)
-            if 'startUtc' in arrs:
-                start = min(arrs['prep'+suffix])
-                stop = max(arrs['end'+suffix])
-            elif 'runQuantumStartCpuTime' in arrs:
-                start = min(arrs['runQuantumStart'+suffix])
-                stop = max(arrs['runQuantumEnd'+suffix])
+            if "startUtc" in arrs:
+                start = min(arrs["prep" + suffix])
+                stop = max(arrs["end" + suffix])
+            elif "runQuantumStartCpuTime" in arrs:
+                start = min(arrs["runQuantumStart" + suffix])
+                stop = max(arrs["runQuantumEnd" + suffix])
             else:
                 # Might be empty b/c intra is noop
                 continue

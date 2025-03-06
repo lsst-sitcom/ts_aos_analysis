@@ -1,0 +1,17 @@
+title: "WET-003-ComCam: Donut Vignetting Tests"
+description: Validate the wavefront estimation using experimental vignetted donuts.
+authors:
+  - name: Bryce Kalmbach
+    slack: brycek
+tags:
+  - comcam
+  - WET
+parameters:
+  collection_name:
+    type: string
+    description: Butler collection.
+    default: "u/brycek/aosBaseline_tie"
+  detector:
+    type: integer
+    description: Detector number.
+    default: 0

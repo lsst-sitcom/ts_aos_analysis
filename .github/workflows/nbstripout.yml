@@ -1,11 +1,8 @@
 name: Notebook Output Checking
 on:
   pull_request:
-    paths:
-      - '**/*.ipynb'
   push:
-    paths:
-      - '**/*.ipynb'
+
 jobs:
   check-notebook-outputs:
     runs-on: ubuntu-latest

@@ -72,6 +72,7 @@ def get_task_metadata(
         for visit, group in zip(visit_list, group_list):
             for detector in detector_list:
                 try:
+                    print(visit, group, detector, instrument, collection)
                     task_md.append(
                         butler.get(
                             f"{task}_metadata",

@@ -17,6 +17,8 @@ This will help quick assesment of each notebook's function while keeping the inf
 Do not use spaces in the filename.
 Instead, replace spaces with underlines (`_`).
 
+Notebooks are available to view on [Times Square at the USDF](https://usdf-rsp-dev.slac.stanford.edu/times-square).
+
 
 ## Methods
 

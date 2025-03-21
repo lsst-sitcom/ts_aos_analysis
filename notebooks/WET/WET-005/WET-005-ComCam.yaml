@@ -1,0 +1,17 @@
+title: "WET-005-ComCam: Giant Donut Test"
+description: Validate the wavefront estimation using largely defocused point sources.
+authors:
+  - name: Bekah Polen
+    slack: rp312
+tags:
+  - comcam
+  - WET
+parameters:
+  collection_name:
+    type: string
+    description: Butler collection.
+    default: "u/rp312/giant_test_11_20"
+  detector:
+    type: integer
+    description: Detector number.
+    default: 0

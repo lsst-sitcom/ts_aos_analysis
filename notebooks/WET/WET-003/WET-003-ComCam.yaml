@@ -15,3 +15,15 @@ parameters:
     type: integer
     description: Detector number.
     default: 0
+  min_seq_num:
+    type: integer
+    description: Starting Sequence Number.
+    default: 90
+  max_seq_num:
+    type: integer
+    description: Ending Sequence Number.
+    default: 107
+  day_obs:
+    type: integer
+    description: Exposure day_obs value from visitInfo.
+    default: 20241115

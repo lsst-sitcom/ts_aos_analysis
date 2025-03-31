@@ -1,0 +1,29 @@
+title: "WET-004-ComCam: Donut Deblending Tests"
+description: Validate the wavefront estimation using blended donuts.
+authors:
+  - name: Bryce Kalmbach
+    slack: brycek
+tags:
+  - comcam
+  - WET
+parameters:
+  collection_name:
+    type: string
+    description: Butler collection.
+    default: "u/brycek/aosRefitWcs_danish_singleBlends_80pxMinSep"
+  detector:
+    type: integer
+    description: Detector number.
+    default: 0
+  min_seq_num:
+    type: integer
+    description: Starting Sequence Number.
+    default: 90
+  max_seq_num:
+    type: integer
+    description: Ending Sequence Number.
+    default: 107
+  day_obs:
+    type: integer
+    description: Exposure day_obs value from visitInfo.
+    default: 20241115

@@ -1,0 +1,25 @@
+title: "WET-013-ComCam: Exposure Time Test"
+description: Measure WEP Performance as a function of exposure time.
+authors:
+  - name: Bryce Kalmbach
+    slack: brycek
+tags:
+  - comcam
+  - WET
+parameters:
+  collection_name:
+    type: string
+    description: Butler collection.
+    default: "u/brycek/aosBaseline_tie"
+  min_seq_num:
+    type: integer
+    description: Starting Sequence Number.
+    default: 161
+  max_seq_num:
+    type: integer
+    description: Ending Sequence Number.
+    default: 202
+  day_obs:
+    type: integer
+    description: Exposure day_obs value from visitInfo.
+    default: 20241105

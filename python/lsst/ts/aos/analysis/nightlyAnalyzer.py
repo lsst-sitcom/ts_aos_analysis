@@ -157,8 +157,11 @@ class NightlyAnalyzer:
             )[0]
 
             # Query RINGSS seeing
-            ringss_data = self.seeing_monitor.getSeeingForExpRecord(rec)
-            ringss.append(ringss_data.fwhmSector)
+            try:
+                ringss_data = self.seeing_monitor.getSeeingForExpRecord(rec)
+                ringss.append(ringss_data.fwhmSector)
+            except:
+                ringss.append(np.nan)
 
             # Query DIMM seeing
             dimm_data = getEfdData(
@@ -331,7 +334,7 @@ class NightlyAnalyzer:
             The maximum sequence number to include.
             The default is None.
         lookback : int or None, optional
-            Number of seqs too look back from seq_max.
+            Number of seqs to look back from seq_max.
             If provided, seq_min is ignored.
             The default is None.
         """
@@ -454,7 +457,7 @@ class NightlyAnalyzer:
             labels = labels[::n]
 
         # Set ticks
-        ax.set(xticks=ticks, xticklabels=ticks)
+        ax.set(xticks=ticks, xticklabels=labels)
 
     def plot_image_quality(
         self,
@@ -474,7 +477,7 @@ class NightlyAnalyzer:
             The maximum sequence number to include.
             The default is None.
         lookback : int or None, optional
-            Number of seqs too look back from seq_max.
+            Number of seqs to look back from seq_max.
             If provided, seq_min is ignored.
             The default is None.
         plot_scatter : bool, optional
@@ -585,7 +588,7 @@ class NightlyAnalyzer:
             The maximum sequence number to include.
             The default is None.
         lookback : int or None, optional
-            Number of seqs too look back from seq_max.
+            Number of seqs to look back from seq_max.
             If provided, seq_min is ignored.
             The default is None.
         plot_scatter : bool, optional
@@ -707,7 +710,7 @@ class NightlyAnalyzer:
             The maximum sequence number to include.
             The default is None.
         lookback : int or None, optional
-            Number of seqs too look back from seq_max.
+            Number of seqs to look back from seq_max.
             If provided, seq_min is ignored.
             The default is None.
         plot_scatter : bool, optional

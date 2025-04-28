@@ -54,6 +54,8 @@ class NightlyAnalyzer:
         butler: Butler | None = None,
         consdb_url: str = "http://consdb-pq.consdb:8080/consdb",
         derotate_zernikes: bool = True,
+        fetch_psf: bool = True,
+        correct_aos_resid: bool = True,
     ) -> None:
         """Create the analyzer
 
@@ -78,12 +80,21 @@ class NightlyAnalyzer:
         derotate_zernikes : bool, optional
             Whether to de-rotate the Zernikes using the physical
             rotator angle. The default is True.
+        fetch_psf : bool, optional
+            Whether to fetch the PSF FWHM from ConsDB. Can turn off
+            if this is causing errors. The default is True.
+        correct_aos_resid : bool, optional
+            Whether to correct the AOS residual using the empirical
+            relation corrected = 1.06 * np.log(1 + original).
+            The default is True.
         """
         # Save params
         self.day_obs = day_obs
         self.seq_min = seq_min
         self.seq_max = seq_max
         self.derotate_zernikes = derotate_zernikes
+        self._fetch_psf = fetch_psf
+        self._correct_aos_resid = correct_aos_resid
 
         if butler is None:
             butler = Butler("LSSTCam", collections="LSSTCam/runs/quickLook")
@@ -96,6 +107,80 @@ class NightlyAnalyzer:
 
         # Create initial database
         self.table = self._fetch(seq_min, seq_max)
+
+    def _query_consdb(self, seq_min: int, seq_max: int) -> pd.DataFrame:
+        """Query ConsDB for the median PSF and airmass
+
+        Parameters
+        ----------
+        seq_min : int
+            The minimum sequence number to fetch.
+        seq_max : int
+            The maximum sequence number to fetch.
+        
+        Returns
+        -------
+        pd.DataFrame
+            Table with data from ConsDB
+        """
+        if self._fetch_psf:
+            query = f"""
+                SELECT
+                    e.seq_num as seq,
+                    e.airmass as airmass,
+                    e.physical_filter as band,
+                    q.psf_sigma_median as psf_fwhm
+                from
+                    cdb_lsstcam.exposure as e ,
+                    cdb_lsstcam.visit1_quicklook as q
+                where
+                    q.visit_id = e.exposure_id and
+                    (e.img_type = 'OBJECT' or e.img_type = 'ACQ') and
+                    e.day_obs = {self.day_obs} and
+                    e.seq_num >= {seq_min} and
+                    e.seq_num <= {seq_max}
+                --order-by e.seq_num
+            """
+            cdb_table = self.cdb_client.query(query).to_pandas()
+        else:
+            query = f"""
+                SELECT
+                    e.seq_num as seq,
+                    e.airmass as airmass,
+                    e.physical_filter as band
+                from
+                    cdb_lsstcam.exposure as e
+                where
+                    (e.img_type = 'OBJECT' or e.img_type = 'ACQ') and
+                    e.day_obs = {self.day_obs} and
+                    e.seq_num >= {seq_min} and
+                    e.seq_num <= {seq_max}
+                --order-by e.seq_num
+            """
+            cdb_table = self.cdb_client.query(query).to_pandas()
+            cdb_table["psf_fwhm"] = np.full(len(cdb_table), np.nan)
+
+        # Convert PSF sigma to FWHM
+        sig2fwhm = 2 * np.sqrt(2 * np.log(2))
+        pixel_tilt = 0.2  # arcsec / pixel
+        cdb_table["psf_fwhm"] = cdb_table["psf_fwhm"] * sig2fwhm * pixel_tilt
+
+        # Calculate FWHM at zenith at 500nm
+        cdb_table.loc[np.isclose(cdb_table["airmass"], 0), "airmass"] = np.nan
+        cdb_table["fwhm_zenith_500nm"] = [
+            fwhm
+            * getAirmassSeeingCorrection(airmass)
+            * getBandpassSeeingCorrection(band)
+            for fwhm, band, airmass in zip(
+                cdb_table["psf_fwhm"], cdb_table["band"], cdb_table["airmass"]
+            )
+        ]
+
+        # Drop band before returning
+        cdb_table = cdb_table.drop("band", axis=1)
+        
+        return cdb_table
+    
 
     def _fetch(self, seq_min: int, seq_max: int) -> pd.DataFrame:
         """Fetch data from the respective databases.
@@ -211,53 +296,8 @@ class NightlyAnalyzer:
             }
         )
 
-        # Query ConsDB for the median PSF and airmass
-        # EVENTUALLY WE WILL WANT THIS FIRST QUERY!
-        # But the quicklook table isn't yet filled
-        # So we will overwrite it for now
-        query = f"""
-        SELECT
-            e.seq_num as seq,
-            e.airmass as airmass,
-            q.psf_sigma_median as psf_fwhm
-        from
-            cdb_lsstcam.exposure as e ,
-            cdb_lsstcam.visit1_quicklook as q
-        where
-            q.visit_id = e.exposure_id and
-            (e.img_type = 'OBJECT' or e.img_type = 'ACQ') and
-            e.day_obs = {self.day_obs} and
-            e.seq_num >= {self.seq_min} and
-            e.seq_num <= {self.seq_max}
-        --order-by e.seq_num
-        """
-        # cdb_table = self.cdb_client.query(query).to_pandas()
-
-        # THIS WILL NEED TO BE DELETED LATER
-        # ####################################################################
-        query = f"""
-        SELECT
-            e.seq_num as seq,
-            e.airmass as airmass
-        from
-            cdb_lsstcam.exposure as e
-        where
-            (e.img_type = 'OBJECT' or e.img_type = 'ACQ') and
-            e.day_obs = {self.day_obs} and
-            e.seq_num >= {self.seq_min} and
-            e.seq_num <= {self.seq_max}
-        --order-by e.seq_num
-        """
-        cdb_table = self.cdb_client.query(query).to_pandas()
-        cdb_table["psf_fwhm"] = np.full(len(cdb_table), np.nan)
-        # ####################################################################
-
-        # Convert PSF sigma to FWHM
-        sig2fwhm = 2 * np.sqrt(2 * np.log(2))
-        pixel_tilt = 0.2  # arcsec / pixel
-        cdb_table["psf_fwhm"] = cdb_table["psf_fwhm"] * sig2fwhm * pixel_tilt
-
         # Add ConsDB data to our table
+        cdb_table = self._query_consdb(seq_min=seq_min, seq_max=seq_max)
         table = pd.merge(table, cdb_table, how="left", on="seq")
 
         # Convert Zernikes from nm to microns
@@ -274,26 +314,66 @@ class NightlyAnalyzer:
         # Calculate FWHM Zernike contributions
         zernikes_fwhm = convertZernikesToPsfWidth(zernikes)
         table[zk_cols] = zernikes_fwhm
-        table["aos_resid"] = np.sqrt(np.sum(np.square(zernikes_fwhm), axis=1))
-
-        # Calculate FWHM at zenith at 500nm
-        table.loc[np.isclose(table["airmass"], 0), "airmass"] = np.nan
-        table["fwhm_zenith_500nm"] = [
-            fwhm
-            * getAirmassSeeingCorrection(airmass)
-            * getBandpassSeeingCorrection(band)
-            for fwhm, band, airmass in zip(
-                table["psf_fwhm"], table["band"], table["airmass"]
-            )
-        ]
+        aos_resid = np.sqrt(np.sum(np.square(zernikes_fwhm), axis=1))
+        if self._correct_aos_resid:
+            aos_resid = 1.06 * np.log(1 + aos_resid)
+        table["aos_resid"] = aos_resid
 
         # Sort by sequence, then detector
         table = table.sort_values(["seq", "detector"])
 
         return table
 
+    def refresh(self) -> None:
+        """Requery for seeing and PSF FWHMs that are NaNs."""
+        # Alias table for brevity below
+        table = self.table
+        
+        # First update missing seeing
+        mask = ~np.isfinite(table.ringss_seeing.values.astype(float))
+        for idx in self.table[mask].index:
+            # Unpack ID info
+            seq, detector, band = table.loc[idx, ["seq", "detector", "band"]]
+            
+            # Get the exposure record
+            if isinstance(seq, str):
+                print(seq, type(seq))
+            rec = list(
+                self.butler.registry.queryDimensionRecords(
+                    "exposure",
+                    dataId={
+                        "instrument": "LSSTCam",
+                        "detector": detector,
+                        "exposure": self.day_obs * 1e5 + int(seq),
+                    },
+                )
+            )[0]
+        
+            # Fill-in new RINGSS data where possible
+            try:
+                ringss_data = self.seeing_monitor.getSeeingForExpRecord(rec)
+                table.loc[idx, "ringss_seeing"] = ringss_data.fwhmSector
+            except:
+                pass
+
+        # Now update missing PSF FWHMs
+        mask = ~np.isfinite(table.psf_fwhm.values.astype(float))
+        
+        # Query CDB table
+        cdb_table = self._query_consdb(
+            seq_min=self.table[mask].seq.min(),
+            seq_max=self.table[mask].seq.max(),
+        )
+        
+        # Merge finite values to replace NaNs
+        # this is a messy block of code!
+        self.table = table.set_index("seq").combine_first(cdb_table.set_index("seq")).reset_index().set_index(table.index)[table.columns]
+
     def update(self, verbose: bool = True) -> None:
         """Update the database by grabbing more recent exposures.
+
+        This also calls self.refresh() to replace old NaNs where
+        possible.
 
         Parameters
         ----------
@@ -301,11 +381,18 @@ class NightlyAnalyzer:
             Whether to print how many new exposures were grabbed.
             Default is True.
         """
+        # First grab new sequences
         len0 = len(self.table)
         seq_min = self.table["seq"].max() + 1
-        self.table = pd.concat([self.table, self._fetch(seq_min, self.seq_max)])
+        self.table = pd.concat(
+            [self.table, self._fetch(seq_min, self.seq_max)],
+            ignore_index=True,
+        )
         if verbose:
             print(f"Grabbed {len(self.table) - len0} more exposures")
+
+        # Now refresh old NaNs
+        self.refresh()
 
     @property
     def zk_cols(self) -> list:
@@ -457,7 +544,11 @@ class NightlyAnalyzer:
             labels = labels[::n]
 
         # Set ticks
-        ax.set(xticks=ticks, xticklabels=labels)
+        if len(ticks) > 10:
+            rot = dict(rotation=30, ha="right")
+        else:
+            rot = dict()
+        ax.set_xticks(ticks=ticks, labels=labels, **rot)
 
     def plot_image_quality(
         self,
@@ -499,7 +590,7 @@ class NightlyAnalyzer:
         )
 
         # Create figure
-        fig, ax = plt.subplots(dpi=120)
+        fig, ax = plt.subplots(dpi=120, figsize=(10, 4))
 
         # Plot AOS residuals
         # First scatter bar for each group
@@ -539,11 +630,12 @@ class NightlyAnalyzer:
         ax.plot(ringss_seeing.values, c="silver", lw=1, label="RINGSS")
 
         # Plot expected FWHM
-        sum_in_quad = np.sqrt(dimm_seeing**2 + aos_resid**2)
+        sum_in_quad = np.sqrt(ringss_seeing**2 + aos_resid**2)
         ax.plot(sum_in_quad.values, c="C1", label="Sum in quad.", ls="--", lw=1)
 
         # Plot measured FWHM
-        ax.plot([], [], c="C0", label="Measured", ls="--")
+        psf_fwhm = data.groupby("seq")["fwhm_zenith_500nm"].median()
+        ax.plot(psf_fwhm.values, c="C0", label="Measured", ls="--")
 
         # Plot AOS requirement
         ax.axhline(0.25, c="C2", label="AOS Requirement", ls=":")
@@ -559,9 +651,8 @@ class NightlyAnalyzer:
         handles = (sum((handle[i::3] for i in range(3)), []) for handle in handles)
         ax.legend(
             *handles,
-            bbox_to_anchor=(0, 1.02, 1, 0.2),
-            loc="lower left",
-            mode="expand",
+            bbox_to_anchor=(0, 1.02, 1, 0.13),
+            loc="upper center",
             borderaxespad=0,
             ncol=3,
         )

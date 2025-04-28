@@ -117,7 +117,7 @@ class NightlyAnalyzer:
             The minimum sequence number to fetch.
         seq_max : int
             The maximum sequence number to fetch.
-        
+
         Returns
         -------
         pd.DataFrame
@@ -178,9 +178,8 @@ class NightlyAnalyzer:
 
         # Drop band before returning
         cdb_table = cdb_table.drop("band", axis=1)
-        
+
         return cdb_table
-    
 
     def _fetch(self, seq_min: int, seq_max: int) -> pd.DataFrame:
         """Fetch data from the respective databases.
@@ -328,13 +327,13 @@ class NightlyAnalyzer:
         """Requery for seeing and PSF FWHMs that are NaNs."""
         # Alias table for brevity below
         table = self.table
-        
+
         # First update missing seeing
         mask = ~np.isfinite(table.ringss_seeing.values.astype(float))
         for idx in self.table[mask].index:
             # Unpack ID info
             seq, detector, band = table.loc[idx, ["seq", "detector", "band"]]
-            
+
             # Get the exposure record
             if isinstance(seq, str):
                 print(seq, type(seq))
@@ -348,7 +347,7 @@ class NightlyAnalyzer:
                     },
                 )
             )[0]
-        
+
             # Fill-in new RINGSS data where possible
             try:
                 ringss_data = self.seeing_monitor.getSeeingForExpRecord(rec)
@@ -358,16 +357,21 @@ class NightlyAnalyzer:
 
         # Now update missing PSF FWHMs
         mask = ~np.isfinite(table.psf_fwhm.values.astype(float))
-        
+
         # Query CDB table
         cdb_table = self._query_consdb(
             seq_min=self.table[mask].seq.min(),
             seq_max=self.table[mask].seq.max(),
         )
-        
+
         # Merge finite values to replace NaNs
         # this is a messy block of code!
-        self.table = table.set_index("seq").combine_first(cdb_table.set_index("seq")).reset_index().set_index(table.index)[table.columns]
+        self.table = (
+            table.set_index("seq")
+            .combine_first(cdb_table.set_index("seq"))
+            .reset_index()
+            .set_index(table.index)[table.columns]
+        )
 
     def update(self, verbose: bool = True) -> None:
         """Update the database by grabbing more recent exposures.

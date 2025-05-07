@@ -21,6 +21,7 @@
 
 import galsim
 import matplotlib.pyplot as plt
+import itertools
 import numpy as np
 import pandas as pd
 from lsst.daf.butler import Butler, EmptyQueryResultError
@@ -129,7 +130,10 @@ class NightlyAnalyzer:
                     e.seq_num as seq,
                     e.airmass as airmass,
                     e.physical_filter as band,
-                    q.psf_sigma_median as psf_fwhm
+                    q.psf_sigma_median as psf_fwhm,
+                    e.focus_z,
+                    e.altitude,
+                    e.science_program
                 from
                     cdb_lsstcam.exposure as e ,
                     cdb_lsstcam.visit1_quicklook as q
@@ -147,7 +151,10 @@ class NightlyAnalyzer:
                 SELECT
                     e.seq_num as seq,
                     e.airmass as airmass,
-                    e.physical_filter as band
+                    e.physical_filter as band,
+                    e.focus_z,
+                    e.altitude,
+                    e.science_program
                 from
                     cdb_lsstcam.exposure as e
                 where
@@ -212,10 +219,15 @@ class NightlyAnalyzer:
         # Loop over refs and pull data from Butler
         seqs = []
         detectors = []
+        #block 365
+        program = []
         bands = []
         ringss = []
         dimm = []
         rotations = []
+        glass_temperatures = []
+        above_glass_temperatures = []
+        cam_dz = []
         zernikes = []
         noll_indices = np.arange(4, 29)
         zk_cols = [f"Z{j}" for j in noll_indices]
@@ -248,13 +260,16 @@ class NightlyAnalyzer:
                 ringss.append(np.nan)
 
             # Query DIMM seeing
-            dimm_data = getEfdData(
-                self.efd_client,
-                "lsst.sal.DIMM.logevent_dimmMeasurement",
-                columns=["fwhm"],
-                expRecord=rec,
-            )
-            dimm.append(dimm_data["fwhm"].mean())
+            try:
+                dimm_data = getEfdData(
+                    self.efd_client,
+                    "lsst.sal.DIMM.logevent_dimmMeasurement",
+                    columns=["fwhm"],
+                    expRecord=rec,
+                )                
+                dimm.append(dimm_data["fwhm"].mean())
+            except:
+                dimm.append(np.nan)
 
             # Grab rotator value from EFD
             rot_data = getEfdData(
@@ -265,6 +280,35 @@ class NightlyAnalyzer:
             )
             rotations.append(rot_data["actualPosition"].mean())
 
+             # Grab temperatures value from EFD
+            temp = getEfdData(
+                self.efd_client,
+                "lsst.sal.MTM1M3TS.glycolLoopTemperature",
+                columns=["aboveMirrorTemperature"],
+                expRecord=rec,
+            )
+            glass_temperatures.append(temp["aboveMirrorTemperature"].mean())
+
+            temp = getEfdData(
+                self.efd_client,
+                "lsst.sal.MTM1M3TS.thermalData",
+                columns=["absoluteTemperature45"],
+                expRecord=rec,
+            )
+            above_glass_temperatures.append(temp["absoluteTemperature45"].mean())
+
+
+            # grab camera
+            #dz = getEfdData(
+            #    self.efd_client,
+            #    "lsst.sal.MTAOS.logevent_degreeOfFreedom",
+            #    columns=["aggregatedDoF5"],
+            #    expRecord=rec,
+            #)
+            #print (dz)
+            #cam_dz.append(dz["aggregatedDoF5"].mean())
+
+            
             # Determine which Zernike coefficients are in table
             zk_table = zk_table[zk_table["label"] == "average"]
             zk_cols_here = [col for col in zk_table.colnames if col.startswith("Z")]
@@ -292,6 +336,8 @@ class NightlyAnalyzer:
                 "ringss_seeing": ringss,
                 "dimm_seeing": dimm,
                 "rotation": rotations,
+                "above_glass_temperature": above_glass_temperatures,
+                "glass_temperature": glass_temperatures,
             }
         )
 
@@ -554,12 +600,132 @@ class NightlyAnalyzer:
             rot = dict()
         ax.set_xticks(ticks=ticks, labels=labels, **rot)
 
+    def plot_rotator_altitude(self, ax, data) -> plt.Axes:
+        """
+        Plot rotator position and elevation.
+        
+        Parameters:
+        -----------
+        ax : matplotlib.axes.Axes
+            The axes to plot on
+        data : pandas.DataFrame
+            The data to plot
+        
+        Returns:
+        --------
+        ax_alt : matplotlib.axes.Axes
+            The secondary y-axis for altitude
+        """
+        
+        # Plot rotator position and elevation
+        rot = data.groupby("seq")["rotation"].median() 
+        alt = data.groupby("seq")["altitude"].median() 
+    
+        ax.set_ylabel('Rotation')
+        ax.plot(
+            rot.values,
+            c="blue",
+            alpha=0.5,
+            lw=1,
+            label="Rotator",
+        )
+        ax.axhline(0., c="C2", ls=":") 
+        ax.tick_params(axis='y')
+        
+        # Create second y-axis that shares the same x-axis
+        ax_alt = ax.twinx()
+    
+        ax_alt.set_ylabel('Altitude')
+        ax_alt.plot(
+            alt.values,
+            c="red",
+            alpha=0.5,
+            lw=1,
+            label="Altitude",
+        )
+        ax_alt.tick_params(axis='y')
+    
+        # Create legend
+        handles, labels = ax.get_legend_handles_labels()
+        handles2, labels2 = ax_alt.get_legend_handles_labels()
+        handles += handles2
+        labels += labels2
+        ax.legend(
+            handles, labels,
+            bbox_to_anchor=(0, 1.02, 1, 0.13),
+            loc="upper center",
+            borderaxespad=0,
+            ncol=2,
+        )
+        
+        return ax_alt
+
+    def plot_temperature(self, ax, data):
+        """
+        Plot temperature data.
+        
+        Parameters:
+        -----------
+        ax : matplotlib.axes.Axes
+            The axes to plot on
+        data : pandas.DataFrame
+            The data to plot
+        """
+        # Plot temperature difference
+        tempAbove = data.groupby("seq")["above_glass_temperature"].median() 
+        tempBelow = data.groupby("seq")["glass_temperature"].median()
+        deltaT = tempAbove - tempBelow
+        
+        ax.set_ylabel('$\\Delta$ T')
+        ax.plot(
+            tempAbove.values,
+            c="orange",
+            alpha=0.5,
+            lw=1,
+            label="Above Glass Temp",
+        )
+        ax.plot(
+            tempBelow.values,
+            c="orange",
+            alpha=0.5,
+            lw=1,
+            ls='-.',
+            label="Glass Temp",
+        )
+        ax.plot(
+            deltaT.values,
+            c="orange",
+            alpha=0.5,
+            lw=1,
+            ls='--',
+            label="Temp Diff",
+        )
+        ax.axhline(0., c="C2", ls=":") 
+        ax.set_ylim(5, 15) 
+        ax.tick_params(axis='y')
+        
+        # Create legend
+        handles = ax.get_legend_handles_labels()
+        handles = (sum((handle[i::3] for i in range(3)), []) for handle in handles)
+        ax.legend(
+            *handles,
+            bbox_to_anchor=(0, 1.02, 1, 0.13),
+            loc="upper center",
+            borderaxespad=0,
+            ncol=3,
+        )
+
+        return ax
+    
     def plot_image_quality(
         self,
         seq_min: int = 0,
         seq_max: int | None = None,
         lookback: int | None = None,
         plot_scatter: bool = False,
+        plot_rotator:bool = False, 
+        plot_temp: bool = False
+        
     ) -> tuple[plt.Figure, plt.Axes]:
         """Plot image quality vs sequence number.
 
@@ -578,6 +744,12 @@ class NightlyAnalyzer:
         plot_scatter : bool, optional
             Whether to plot scatter points for each detector.
             The default is True.
+        plot_rotator : bool, optional
+            Whether to include the rotator/altitude plot
+            The default is False.
+        plot_temp : bool, optional
+            Whether to include the temperature plot
+            The default is False.
 
         Returns
         -------
@@ -593,8 +765,44 @@ class NightlyAnalyzer:
             lookback=lookback,
         )
 
-        # Create figure
-        fig, ax = plt.subplots(dpi=120, figsize=(10, 4))
+        # Determine how many subplots we need
+        n_plots = 1  # Main plot always included
+        if plot_rotator:
+            n_plots += 1
+        if plot_temp:
+            n_plots += 1
+
+        # Create subplots with appropriate height ratios
+        height_ratios = []
+        if plot_rotator:
+            height_ratios.append(1)
+        if plot_temp:
+            height_ratios.append(1)
+        height_ratios.append(3)  # Main plot is 3x height
+        
+        fig, axes = plt.subplots(n_plots, 1, dpi=120, figsize=(8, 2+2*n_plots),
+                              gridspec_kw={'height_ratios': height_ratios},
+                              sharex=True)
+        
+        # If we only have one subplot, make axes iterable
+        if n_plots == 1:
+            axes = [axes]
+        
+        # Keep track of current axis index
+        ax_idx = 0
+
+        # Add rotator plot if requested
+        if plot_rotator:
+            self.plot_rotator_altitude(axes[ax_idx], data)
+            ax_idx += 1
+        
+        # Add temperature plot if requested
+        if plot_temp:
+            self.plot_temperature(axes[ax_idx], data)
+            ax_idx += 1
+
+        # Main plot is always the last one
+        ax = axes[ax_idx]
 
         # Plot AOS residuals
         # First scatter bar for each group
@@ -615,53 +823,94 @@ class NightlyAnalyzer:
                     s=60,
                 )
 
+        lines = []
         # Now line through the medians
         aos_resid = data.groupby("seq")["aos_resid"].median()
-        ax.plot(aos_resid.values, c="k", lw=1, label="AOS Resid")
-
+        line_aos = ax.plot(aos_resid.values, c="k", lw=1, label="AOS Resid")[0]
+        lines.append(line_aos)
+        
         # Plot DIMM seeing
         dimm_seeing = data.groupby("seq")["dimm_seeing"].median()
-        ax.plot(
+        line_dimm = ax.plot(
             dimm_seeing.values,
             c="rebeccapurple",
             alpha=0.5,
             lw=1,
             label="DIMM",
-        )
-
+        )[0]
+        lines.append(line_dimm)
+        
         # Plot Gemini RINGSS seeing
         ringss_seeing = data.groupby("seq")["ringss_seeing"].median()
-        ax.plot(ringss_seeing.values, c="silver", lw=1, label="RINGSS")
-
+        line_ringss = ax.plot(ringss_seeing.values, c="silver", lw=1, label="RINGSS")[0]
+        lines.append(line_ringss)
+        
         # Plot expected FWHM
         sum_in_quad = np.sqrt(ringss_seeing**2 + aos_resid**2)
-        ax.plot(sum_in_quad.values, c="C1", label="Sum in quad.", ls="--", lw=1)
-
+        line_sum = ax.plot(sum_in_quad.values, c="C1", label="Sum in quad.", ls="--", lw=1)[0]
+        lines.append(line_sum)
+        
         # Plot measured FWHM
         psf_fwhm = data.groupby("seq")["fwhm_zenith_500nm"].median()
-        ax.plot(psf_fwhm.values, c="C0", label="Measured", ls="--")
-
+        line_psf = ax.plot(psf_fwhm.values, c="C0", label="Measured", ls="--")[0]
+        lines.append(line_psf)
+        
         # Plot AOS requirement
-        ax.axhline(0.25, c="C2", label="AOS Requirement", ls=":")
-
+        line_req = ax.axhline(0.25, c="C2", label="AOS Requirement", ls=":")
+        lines.append(line_req)
+        
         # Axis labels
         self._set_xticks(aos_resid, ax)
         ax.set(xlabel="Sequence number", ylabel="arcsec (zenith, 500nm)")
         self._annotate_bands(data, ax)
-
-        # Create legend, but reorder handles so that entries go
-        # row-first instead of column-first
+        
+        # Create legend
         handles = ax.get_legend_handles_labels()
-        handles = (sum((handle[i::3] for i in range(3)), []) for handle in handles)
-        ax.legend(
+        legend = ax.legend(
             *handles,
-            bbox_to_anchor=(0, 1.02, 1, 0.13),
+            bbox_to_anchor=(0, 1.05, 1, 0.1),
             loc="upper center",
             borderaxespad=0,
             ncol=3,
         )
-
-        return fig, ax
+        
+        # Enable picking on the legend
+        for legline in legend.get_lines():
+            legline.set_picker(10)  # Increased tolerance for easier clicking
+        
+        # Dictionary to map legend lines to original lines
+        lined = {}
+        for i, legline in enumerate(legend.get_lines()):
+            if i < len(lines):  # Ensure we don't go out of bounds
+                lined[legline] = lines[i]
+        
+        # Event handler for legend picks
+        def on_pick(event):
+            # Verify we have a legend line
+            legline = event.artist
+            
+            # Check if this is a legend line we know about
+            if legline not in lined:
+                return
+                
+            origline = lined[legline]
+            visible = not origline.get_visible()
+            origline.set_visible(visible)
+            
+            # Update legend line appearance
+            if visible:
+                legline.set_alpha(1.0)
+            else:
+                legline.set_alpha(0.2)
+            
+            fig.canvas.draw_idle()
+        
+        # Connect event handler
+        fig.canvas.mpl_connect('pick_event', on_pick)
+        
+        plt.tight_layout()
+        plt.show()
+        return fig, axes
 
     def plot_history_resid(
         self,
@@ -945,3 +1194,244 @@ class NightlyAnalyzer:
                 ax.set_axis_off()
 
         return fig, axes
+   
+    def plot_zks_quality(
+        self,
+        seq_min: int = 0,
+        seq_max: int | None = None,
+        lookback: int | None = None,
+        plot_scatter: bool = False,
+        plot_rotator:bool = False, 
+        plot_temp: bool = False,
+        interactive: bool = False
+        ) -> tuple[plt.Figure, plt.Axes]:
+
+        """
+        Plot Zernike coefficients quality as a function of sequence.
+        
+        Parameters
+        ----------
+        seq_min : int, optional
+            The minimum sequence to include.
+            The default is 0.
+        seq_max : int or None, optional
+            The maximum sequence number to include.
+            The default is None.
+        lookback : int or None, optional
+            Number of seqs to look back from seq_max.
+            If provided, seq_min is ignored.
+            The default is None.
+        plot_scatter : bool, optional
+            Whether to plot scatter points for each detector.
+            The default is True.
+        plot_rotator : bool, optional
+            Whether to include the rotator/altitude plot
+            The default is False.
+        plot_temp : bool, optional
+            Whether to include the temperature plot
+            The default is False.
+        interactive : bool, optional
+            Whether to iallow interactive adding and removal of modes
+            The default is False.
+
+        Returns
+        -------
+        plt.Figure
+            Matplotlib figure object
+        plt.Axes
+            Matplotlib axis
+        """
+    
+        # Downselect data
+        data = self.downselect(
+            seq_min=seq_min,
+            seq_max=seq_max,
+            lookback=lookback,
+        )    
+        
+        # Determine how many subplots we need
+        n_plots = 1  # Main plot always included
+        if plot_rotator:
+            n_plots += 1
+        if plot_temp:
+            n_plots += 1
+        
+        # Create subplots with appropriate height ratios
+        height_ratios = []
+        if plot_rotator:
+            height_ratios.append(1)
+        if plot_temp:
+            height_ratios.append(1)
+        height_ratios.append(3)  # Main plot is 3x height
+        
+        fig, axes = plt.subplots(n_plots, 1, dpi=120, figsize=(10, 2+2*n_plots),
+                              gridspec_kw={'height_ratios': height_ratios},
+                              sharex=True)
+        
+        # If we only have one subplot, make axes iterable
+        if n_plots == 1:
+            axes = [axes]
+        
+        # Keep track of current axis index
+        ax_idx = 0
+        
+        # Add rotator plot if requested
+        if plot_rotator:
+            self.plot_rotator_altitude(axes[ax_idx], data)
+            ax_idx += 1
+        
+        # Add temperature plot if requested
+        if plot_temp:
+            self.plot_temperature(axes[ax_idx], data)
+            ax_idx += 1
+        
+        # Main plot is always the last one
+        ax = axes[ax_idx]
+
+        # Zernike coefficient data
+        table = {
+            "Defocus (4)": [4, None],
+            "Spherical (11)": [11, None],
+            "2nd Spherical (22)": [22, None],
+            "Coma (7, 8)": [7, 8],
+            "2nd Coma (17, 18)": [17, 18],
+            "Astigmatism (5, 6)": [5, 6],
+            "2nd Astigmatism (12, 13)": [12, 13],
+            "Trefoil (9, 10)": [9, 10],
+            "2nd Trefoil (18, 19)": [18, 19],
+            "Quadrafoil (14, 15)": [14, 15],
+            "Pentafoil (20, 21)": [20, 21],
+            "Hexafoil (27, 28)": [27, 28],
+        }
+    
+        colors = [
+            "#1f77b4",  # blue
+            "#ff7f0e",  # orange
+            "#2ca02c",  # green
+            "#d62728",  # red
+            "#9467bd",  # purple
+            "#8c564b",  # brown
+            "#e377c2",  # pink
+            "#7f7f7f",  # gray
+            "#bcbd22",  # olive
+            "#17becf",  # cyan
+            "#aec7e8",  # light blue
+            "#ffbb78",  # light orange
+        ]
+        color_cycle = itertools.cycle(colors)
+
+        # Plot AOS residuals
+        # First scatter bar for each group
+
+
+        legend_lines = []
+        legend_colors = []
+        
+        for key, zks in table.items():
+            color = next(color_cycle)
+            legend_colors.append(color)
+            lines = []
+            
+            for zk in zks:
+                if zk is not None:
+                    # Determine line style based on Zernike index
+                    ls = "-" if zk % 2 == 0 or zk == 11 else "--"
+    
+                    # Plot the Zernike coefficient medians
+                    medians = data.groupby("seq")[f"Z{zk}"].median()
+                    line = ax.plot(medians.values, c=color, lw=1, ls=ls, label=key)[0]
+                    lines.append(line)
+
+                    if plot_scatter:
+                        #TODO (05/06/2025) need to sort out setting line color when I have scatter points
+                        for i, (group, group_data) in enumerate(data.groupby("seq")):
+                            line = ax.plot(
+                                np.full_like(group_data[f"Z{zk}"], i),
+                                group_data[f"Z{zk}"].values,
+                                c="k",
+                                lw=1,
+                                ls=ls,
+                            )
+                            scatter = ax.scatter(
+                                np.full_like(group_data[f"Z{zk}"], i),
+                                group_data[f"Z{zk}"].values,
+                                facecolor=color,
+                                edgecolor=self._detector_colors(group_data),
+                                marker=".",
+                                zorder=10,
+                                s=60,
+                            )
+                            lines.append(line[0])
+                            lines.append(scatter)
+            legend_lines.append(lines)
+        
+        # Mark zero
+        ax.axhline(0, c="silver", lw=1, zorder=-1)
+        
+        # Axis labels
+        self._set_xticks(medians, ax)
+        ax.set(
+            xlabel="Sequence number",
+            ylabel='AOS FWHM Resid (")',
+        )
+        
+        # Create legend
+        handles = ax.get_legend_handles_labels()
+        legend = ax.legend(
+            list(dict.fromkeys(handles[1])),
+            bbox_to_anchor=(1.03, 0.5),
+            loc="center left",
+            borderaxespad=0,
+            ncol=2,
+        )
+        
+        # Set legend line colors
+        for i, leg_lines in enumerate(legend.get_lines()):
+            leg_lines.set_color(legend_colors[i])
+        
+        # If interactive set all lines invisible initially
+        if interactive:
+            for lines in legend_lines:
+                for line in lines:
+                    line.set_visible(False)
+            
+        # Enable picking on the legend
+        for legline in legend.get_lines():
+            legline.set_picker(10)  # Increased tolerance for easier clicking
+        
+        # Dictionary to map legend lines to original lines
+        lined = {}
+        for i, legline in enumerate(legend.get_lines()):
+            lined[legline] = legend_lines[i]
+        
+        # Event handler for legend picks
+        def on_pick(event):
+            # Verify we have a legend line
+            legline = event.artist
+            
+            # Check if this is a legend line we know about
+            if legline not in lined:
+                return
+                
+            origlines = lined[legline]
+            visible = not origlines[0].get_visible()
+            
+            for line in origlines:
+                line.set_visible(visible)
+            
+            # Update legend line appearance
+            if visible:
+                legline.set_alpha(1.0)
+            else:
+                legline.set_alpha(0.2)
+            
+            fig.canvas.draw_idle()
+        
+        # Connect event handler
+        fig.canvas.mpl_connect('pick_event', on_pick)
+        
+        plt.tight_layout()
+        plt.show()
+
+        return fig, axes
+

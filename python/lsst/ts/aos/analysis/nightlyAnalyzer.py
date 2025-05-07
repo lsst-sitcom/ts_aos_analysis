@@ -287,7 +287,7 @@ class NightlyAnalyzer:
                 columns=["aboveMirrorTemperature"],
                 expRecord=rec,
             )
-            glass_temperatures.append(temp["aboveMirrorTemperature"].mean())
+            above_glass_temperatures.append(temp["aboveMirrorTemperature"].mean())
 
             temp = getEfdData(
                 self.efd_client,
@@ -295,7 +295,7 @@ class NightlyAnalyzer:
                 columns=["absoluteTemperature45"],
                 expRecord=rec,
             )
-            above_glass_temperatures.append(temp["absoluteTemperature45"].mean())
+            glass_temperatures.append(temp["absoluteTemperature45"].mean())
 
 
             # grab camera

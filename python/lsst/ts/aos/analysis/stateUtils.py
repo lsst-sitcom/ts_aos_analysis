@@ -51,7 +51,7 @@ def m1m3_force_to_bending_mode(force: np.ndarray) -> np.ndarray:
 
 class StateFetcher:
     def __init__(
-        self, butler: Butler, efdClient: EfdClient, instrument: str = "LSSTComCam"
+        self, butler: Butler, efdClient: EfdClient, instrument: str = "LSSTCam"
     ) -> None:
         """StateFetcher class to retrieve relevant information on the hardware
         from EFD given a specific exposure.

@@ -147,7 +147,7 @@ class StateFetcher:
         exp_id: int | None = None,
         record: DimensionRecord | None = None,
         component: str | None = None,
-        compensated: bool | None = None,
+        compensated: bool | None = False,
         do_mean: bool = True,
         out_type: str = "position",
     ) -> QTable | np.ndarray | dict:
@@ -200,10 +200,8 @@ class StateFetcher:
             day_obs=day_obs, seq_num=seq_num, exp_id=exp_id, record=record
         )
 
-        if component == "Camera":
+        if component in ["Cam", "Camera"]:
             component = "Cam"
-            salIndex = 1
-        elif component == "Cam":
             salIndex = 1
         elif component == "M2":
             salIndex = 2
@@ -435,6 +433,7 @@ class StateFetcher:
 
         return np.mean(table[topic], axis=0)
 
+    @lru_cache
     def get_M2_bending(
         self,
         *,
@@ -471,6 +470,7 @@ class StateFetcher:
             out[f"M2_B{i+1}"] = quantity[i]
         return out
 
+    @lru_cache
     def get_M1M3_bending(
         self,
         *,
@@ -640,7 +640,6 @@ class StateFetcher:
             out[i] = event[f"aggregatedDoF{i}"]
         return out
 
-    @lru_cache
     def _get_requested_output(
         self,
         out_type: str,
@@ -775,7 +774,6 @@ class StateFetcher:
 
         return val
 
-    # @lru_cache
     def _get_mount_telemetry(self, record: DimensionRecord) -> pd.DataFrame:
         return getEfdData(self.client, "lsst.sal.MTPtg.mountStatus", expRecord=record)
 

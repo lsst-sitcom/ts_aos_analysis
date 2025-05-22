@@ -30,7 +30,11 @@ from lsst.summit.utils import (
     getAirmassSeeingCorrection,
     getBandpassSeeingCorrection,
 )
-from lsst.summit.utils.efdUtils import getEfdData, makeEfdClient
+from lsst.summit.utils.efdUtils import (
+    getEfdData,
+    getMostRecentRowWithDataBefore,
+    makeEfdClient,
+)
 from lsst.ts.wep.utils import convertZernikesToPsfWidth, makeDense
 
 
@@ -248,13 +252,17 @@ class NightlyAnalyzer:
                 ringss.append(np.nan)
 
             # Query DIMM seeing
-            dimm_data = getEfdData(
-                self.efd_client,
-                "lsst.sal.DIMM.logevent_dimmMeasurement",
-                columns=["fwhm"],
-                expRecord=rec,
-            )
-            dimm.append(dimm_data["fwhm"].mean())
+            try:
+                dimm_data = getMostRecentRowWithDataBefore(
+                    self.efd_client,
+                    "lsst.sal.DIMM.logevent_dimmMeasurement",
+                    rec.timespan.end,
+                    maxSearchNMinutes=5,
+                )
+            except ValueError:
+                dimm.append(np.nan)
+            else:
+                dimm.append(dimm_data["fwhm"])
 
             # Grab rotator value from EFD
             rot_data = getEfdData(

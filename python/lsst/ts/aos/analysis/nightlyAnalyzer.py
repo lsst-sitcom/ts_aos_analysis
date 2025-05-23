@@ -701,7 +701,10 @@ class NightlyAnalyzer:
             label="Temp Diff",
         )
         ax.axhline(0., c="C2", ls=":") 
-        ax.set_ylim(5, 15) 
+        ax.set_ylim(
+            min(tempBelow.min(), tempAbove.min()) - 1,
+            max(tempBelow.max(), tempAbove.max()) + 1
+        )
         ax.tick_params(axis='y')
         
         # Create legend
@@ -884,29 +887,6 @@ class NightlyAnalyzer:
             if i < len(lines):  # Ensure we don't go out of bounds
                 lined[legline] = lines[i]
         
-        # Event handler for legend picks
-        def on_pick(event):
-            # Verify we have a legend line
-            legline = event.artist
-            
-            # Check if this is a legend line we know about
-            if legline not in lined:
-                return
-                
-            origline = lined[legline]
-            visible = not origline.get_visible()
-            origline.set_visible(visible)
-            
-            # Update legend line appearance
-            if visible:
-                legline.set_alpha(1.0)
-            else:
-                legline.set_alpha(0.2)
-            
-            fig.canvas.draw_idle()
-        
-        # Connect event handler
-        fig.canvas.mpl_connect('pick_event', on_pick)
         
         plt.tight_layout()
         plt.show()
@@ -1389,46 +1369,12 @@ class NightlyAnalyzer:
         for i, leg_lines in enumerate(legend.get_lines()):
             leg_lines.set_color(legend_colors[i])
         
-        # If interactive set all lines invisible initially
-        if interactive:
-            for lines in legend_lines:
-                for line in lines:
-                    line.set_visible(False)
             
-        # Enable picking on the legend
-        for legline in legend.get_lines():
-            legline.set_picker(10)  # Increased tolerance for easier clicking
-        
         # Dictionary to map legend lines to original lines
         lined = {}
         for i, legline in enumerate(legend.get_lines()):
             lined[legline] = legend_lines[i]
         
-        # Event handler for legend picks
-        def on_pick(event):
-            # Verify we have a legend line
-            legline = event.artist
-            
-            # Check if this is a legend line we know about
-            if legline not in lined:
-                return
-                
-            origlines = lined[legline]
-            visible = not origlines[0].get_visible()
-            
-            for line in origlines:
-                line.set_visible(visible)
-            
-            # Update legend line appearance
-            if visible:
-                legline.set_alpha(1.0)
-            else:
-                legline.set_alpha(0.2)
-            
-            fig.canvas.draw_idle()
-        
-        # Connect event handler
-        fig.canvas.mpl_connect('pick_event', on_pick)
         
         plt.tight_layout()
         plt.show()

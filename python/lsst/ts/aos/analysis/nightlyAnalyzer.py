@@ -22,6 +22,7 @@
 import galsim
 import matplotlib.pyplot as plt
 import itertools
+
 import numpy as np
 import pandas as pd
 from lsst.daf.butler import Butler, EmptyQueryResultError
@@ -31,7 +32,13 @@ from lsst.summit.utils import (
     getAirmassSeeingCorrection,
     getBandpassSeeingCorrection,
 )
-from lsst.summit.utils.efdUtils import getEfdData, makeEfdClient
+
+from lsst.summit.utils.efdUtils import (
+    getEfdData,
+    getMostRecentRowWithDataBefore,
+    makeEfdClient,
+)
+
 from lsst.ts.wep.utils import convertZernikesToPsfWidth, makeDense
 
 
@@ -219,7 +226,7 @@ class NightlyAnalyzer:
         # Loop over refs and pull data from Butler
         seqs = []
         detectors = []
-        #block 365
+
         program = []
         bands = []
         ringss = []
@@ -228,6 +235,7 @@ class NightlyAnalyzer:
         glass_temperatures = []
         above_glass_temperatures = []
         cam_dz = []
+
         zernikes = []
         noll_indices = np.arange(4, 29)
         zk_cols = [f"Z{j}" for j in noll_indices]
@@ -261,15 +269,16 @@ class NightlyAnalyzer:
 
             # Query DIMM seeing
             try:
-                dimm_data = getEfdData(
+                dimm_data = getMostRecentRowWithDataBefore(
                     self.efd_client,
                     "lsst.sal.DIMM.logevent_dimmMeasurement",
-                    columns=["fwhm"],
-                    expRecord=rec,
-                )                
-                dimm.append(dimm_data["fwhm"].mean())
-            except:
+                    rec.timespan.end,
+                    maxSearchNMinutes=5,
+                )
+            except ValueError:
                 dimm.append(np.nan)
+            else:
+                dimm.append(dimm_data["fwhm"])
 
             # Grab rotator value from EFD
             rot_data = getEfdData(
@@ -720,6 +729,7 @@ class NightlyAnalyzer:
 
         return ax
     
+
     def plot_image_quality(
         self,
         seq_min: int = 0,
@@ -728,7 +738,6 @@ class NightlyAnalyzer:
         plot_scatter: bool = False,
         plot_rotator:bool = False, 
         plot_temp: bool = False
-        
     ) -> tuple[plt.Figure, plt.Axes]:
         """Plot image quality vs sequence number.
 
@@ -753,7 +762,6 @@ class NightlyAnalyzer:
         plot_temp : bool, optional
             Whether to include the temperature plot
             The default is False.
-
         Returns
         -------
         plt.Figure
@@ -1380,4 +1388,5 @@ class NightlyAnalyzer:
         plt.show()
 
         return fig, axes
+
 

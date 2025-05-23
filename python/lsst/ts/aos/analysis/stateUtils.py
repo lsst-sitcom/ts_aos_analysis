@@ -51,7 +51,7 @@ def m1m3_force_to_bending_mode(force: np.ndarray) -> np.ndarray:
 
 class StateFetcher:
     def __init__(
-        self, butler: Butler, efdClient: EfdClient, instrument: str = "LSSTComCam"
+        self, butler: Butler, efdClient: EfdClient, instrument: str = "LSSTCam"
     ) -> None:
         """StateFetcher class to retrieve relevant information on the hardware
         from EFD given a specific exposure.
@@ -147,7 +147,7 @@ class StateFetcher:
         exp_id: int | None = None,
         record: DimensionRecord | None = None,
         component: str | None = None,
-        compensated: bool | None = None,
+        compensated: bool | None = False,
         do_mean: bool = True,
         out_type: str = "position",
     ) -> QTable | np.ndarray | dict:
@@ -200,10 +200,8 @@ class StateFetcher:
             day_obs=day_obs, seq_num=seq_num, exp_id=exp_id, record=record
         )
 
-        if component == "Camera":
+        if component in ["Cam", "Camera"]:
             component = "Cam"
-            salIndex = 1
-        elif component == "Cam":
             salIndex = 1
         elif component == "M2":
             salIndex = 2
@@ -435,6 +433,7 @@ class StateFetcher:
 
         return np.mean(table[topic], axis=0)
 
+    @lru_cache
     def get_M2_bending(
         self,
         *,
@@ -471,6 +470,7 @@ class StateFetcher:
             out[f"M2_B{i+1}"] = quantity[i]
         return out
 
+    @lru_cache
     def get_M1M3_bending(
         self,
         *,
@@ -640,7 +640,6 @@ class StateFetcher:
             out[i] = event[f"aggregatedDoF{i}"]
         return out
 
-    @lru_cache
     def _get_requested_output(
         self,
         out_type: str,
@@ -775,7 +774,6 @@ class StateFetcher:
 
         return val
 
-    # @lru_cache
     def _get_mount_telemetry(self, record: DimensionRecord) -> pd.DataFrame:
         return getEfdData(self.client, "lsst.sal.MTPtg.mountStatus", expRecord=record)
 
@@ -855,3 +853,90 @@ class StateFetcher:
             return out
 
         return table
+
+    def state_diff(
+        self,
+        day_obs1: int,
+        seq_num1: int,
+        *,
+        day_obs2: int | None = None,
+        seq_num2: int | None = None,
+        verbose: bool = False,
+    ):
+        """Return the difference between two states, ignoring any differences below a
+        threshold.
+
+        Parameters
+        ----------
+        day_obs1 : `int`
+            Observation day to query.
+        seq_num1 : `int`
+            Sequence number to query.
+        day_obs2 : `int`, optional
+            Observation day to query.  If None then assume day_obs1.
+        seq_num2 : `int`, optional
+            Sequence number to query.  If None then assume seq_num1+1.
+        verbose : `bool`, optional
+            If True, print the differences between the two states.
+
+        Returns
+        -------
+        dict
+            Dictionary with the difference between the two states.  The keys are the
+            same as in the state dictionary, and the values are astropy.units.Quantity.
+        """
+        if day_obs2 is None:
+            day_obs2 = day_obs1
+        if seq_num2 is None:
+            seq_num2 = seq_num1 + 1
+
+        state1 = {}
+        state2 = {}
+        state1.update(self.get_hexapods(day_obs=day_obs1, seq_num=seq_num1))
+        state2.update(self.get_hexapods(day_obs=day_obs2, seq_num=seq_num2))
+        state1.update(self.get_M1M3_bending(day_obs=day_obs1, seq_num=seq_num1))
+        state2.update(self.get_M1M3_bending(day_obs=day_obs2, seq_num=seq_num2))
+        state1.update(self.get_M2_bending(day_obs=day_obs1, seq_num=seq_num1))
+        state2.update(self.get_M2_bending(day_obs=day_obs2, seq_num=seq_num2))
+
+        # Josh determined these empirically.
+        threshold = {}
+        for prefix in ["M2_", "Cam_"]:
+            threshold[f"{prefix}x"] = 10 * u.micron
+            threshold[f"{prefix}y"] = 10 * u.micron
+            threshold[f"{prefix}z"] = 0.1 * u.micron
+            threshold[f"{prefix}rx"] = 0.001 * u.degree
+            threshold[f"{prefix}ry"] = 0.001 * u.degree
+        for i in range(20):
+            threshold[f"M1M3_B{i+1}"] = 0.001 * u.micron
+        for i in range(20):
+            threshold[f"M2_B{i+1}"] = 0.001 * u.micron
+
+        # Only include differences that exceed the threshold.
+        out = {}
+        for k, v1 in state1.items():
+            v2 = state2[k]
+            dv = v2 - v1
+            if abs(dv) > threshold[k]:
+                out[k] = dv
+
+        if verbose:
+            outstr = "dof"
+            outstr += " " * 17 + f"{day_obs1}{seq_num1:05d}"
+            outstr += " " * 9 + f"{day_obs2}{seq_num2:05d}"
+            outstr += " " * 18 + "diff"
+            print(outstr)
+            print()
+            for k, dv in out.items():
+                v1 = state1[k]
+                v2 = state2[k]
+                # Quantities don't play well with f-string format lengths, so do by hand
+                kout = f"{k:10} "
+                v1out = f"{v1:15.3f}"
+                v1out += " " * (15 + 7 - len(v1out))
+                v2out = f"{v2:15.3f}"
+                v2out += " " * (15 + 7 - len(v2out))
+                dvout = f"{dv:15.3f}"
+                dvout += " " * (15 + 7 - len(dvout))
+                print(kout + v1out + v2out + dvout)
+        return out

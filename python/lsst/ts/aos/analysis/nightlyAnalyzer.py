@@ -711,10 +711,10 @@ class NightlyAnalyzer:
             ls='--',
             label="Temp Diff",
         )
-        ax_delta_t.axhline(0., c="k", ls=":")
+        ax_delta_t.axhline(0., c="k", ls=":", label="$\\Delta$ T = 0")
         ax_delta_t.set_ylim(
-            min(deltaT.values) - 0.5,
-            max(deltaT.values) + 0.5
+            min(min(deltaT.values) - 0.5, -0.5),
+            max(max(deltaT.values) + 0.5, 0.5)
         )
         ax_delta_t.tick_params(axis='y')
 
@@ -729,7 +729,7 @@ class NightlyAnalyzer:
             bbox_to_anchor=(0, 1.1, 1, 0.13),
             loc="upper center",
             borderaxespad=0,
-            ncol=3,
+            ncol=4,
         )
 
         return ax
@@ -1334,7 +1334,7 @@ class NightlyAnalyzer:
             lines = []
 
             for zk in zks:
-                # Skip Zernikes outside the specified range
+                # Again, skip Zernikes outside the specified range
                 if zk is None or (zk < jmin or zk > jmax):
                     continue
                 else:

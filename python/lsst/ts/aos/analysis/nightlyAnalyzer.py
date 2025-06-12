@@ -400,21 +400,21 @@ class NightlyAnalyzer:
 
         # Now update missing PSF FWHMs
         mask = ~np.isfinite(table.psf_fwhm.values.astype(float))
+        if np.sum(mask) > 0:
+            # Query CDB table
+            cdb_table = self._query_consdb(
+                seq_min=self.table[mask].seq.min(),
+                seq_max=self.table[mask].seq.max(),
+            )
 
-        # Query CDB table
-        cdb_table = self._query_consdb(
-            seq_min=self.table[mask].seq.min(),
-            seq_max=self.table[mask].seq.max(),
-        )
-
-        # Merge finite values to replace NaNs
-        # this is a messy block of code!
-        self.table = (
-            table.set_index("seq")
-            .combine_first(cdb_table.set_index("seq"))
-            .reset_index()
-            .set_index(table.index)[table.columns]
-        )
+            # Merge finite values to replace NaNs
+            # this is a messy block of code!
+            self.table = (
+                table.set_index("seq")
+                .combine_first(cdb_table.set_index("seq"))
+                .reset_index()
+                .set_index(table.index)[table.columns]
+            )
 
     def update(self, verbose: bool = True) -> None:
         """Update the database by grabbing more recent exposures.

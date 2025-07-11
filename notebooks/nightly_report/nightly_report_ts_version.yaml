@@ -7,7 +7,7 @@ tags:
   - lsstcam
   - nightly_report
 parameters:
-  day:
+  day_obs:
     type: integer
     description: Day for the report.
     default: 20250530

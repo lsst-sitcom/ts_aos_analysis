@@ -1,5 +1,5 @@
-title: "Nightly Report: IQ, AOS, Thermal, Aberrations and Degrees of Freedom"
-description: Generate a nightly report for the IQ, AOS, Thermal, Aberrations and Degrees of Freedom.
+title: "Simplified Nightly Report: IQ, AOS, and Aberrations"
+description: Generate a nightly report for the IQ, AOS, and Aberrations.
 authors:
   - name: Guillem Megias
     slack: gmegias
@@ -8,14 +8,19 @@ tags:
   - nightly_report
 parameters:
   day_obs:
-    type: integer
+    type: string
+    format: dayobs
     description: Day for the report.
-    default: 20250530
+    dynamic_default: "yesterday"
   seq_min:
     type: integer
     description: Minimum sequence number to include in the report.
-    default: 100
+    default: 0
   seq_max:
     type: integer
     description: Maximum sequence number to include in the report.
-    default: 200
+    default: 900
+
+schedule:
+  - freq: "daily"
+    hour: 12

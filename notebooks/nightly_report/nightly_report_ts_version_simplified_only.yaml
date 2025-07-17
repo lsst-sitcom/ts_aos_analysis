@@ -1,0 +1,26 @@
+title: "Simplified Nightly Report: IQ, AOS, and Aberrations"
+description: Generate a nightly report for the IQ, AOS, and Aberrations.
+authors:
+  - name: Guillem Megias
+    slack: gmegias
+tags:
+  - lsstcam
+  - nightly_report
+parameters:
+  day_obs:
+    type: string
+    format: dayobs
+    description: Day for the report.
+    dynamic_default: "yesterday"
+  seq_min:
+    type: integer
+    description: Minimum sequence number to include in the report.
+    default: 0
+  seq_max:
+    type: integer
+    description: Maximum sequence number to include in the report.
+    default: 900
+
+schedule:
+  - freq: "daily"
+    hour: 12

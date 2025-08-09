@@ -1,0 +1,18 @@
+title: "Image Quality Nightly Report: IQ, AOS, and EAS"
+description: Generate a nightly report for the IQ, AOS, and EAS.
+authors:
+  - name: Bryce Kalmbach
+    slack: brycek
+tags:
+  - lsstcam
+  - nightly_report
+parameters:
+  dayobs:
+    type: string
+    format: dayobs
+    description: Dayobs for the report.
+    dynamic_default: "yesterday"
+
+schedule:
+  - freq: "daily"
+    hour: 12

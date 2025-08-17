@@ -21,6 +21,7 @@ parameters:
     description: Maximum sequence number to include in the report.
     default: 900
 
+schedule_enabled: true
 schedule:
   - freq: "daily"
     hour: 12

@@ -68,7 +68,7 @@ class AOSDatabase:
         self.m2_bmf = BendModeToForce("M2", self.ofc_data)
         self.m1m3_bmf = BendModeToForce("M1M3", self.ofc_data)
 
-        self.det_order = (191, 195, 199, 203)
+        self.det_order = list([191, 195, 199, 203])
         camera = LsstCam().getCamera()
         self.detector_names = [
             camera.get(det_id).getName() for det_id in self.det_order

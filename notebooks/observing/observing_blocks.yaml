@@ -1,0 +1,27 @@
+title: "Observing Blocks: plot parameter space explored for a given science program."
+description: Generate an observing blocks parameter space plot
+authors:
+  - name: Chris Suberlak
+    slack: suberlak
+tags:
+  - lsstcam
+  - observing_blocks
+  - observing
+parameters:
+  day_obs_min:
+    type: string
+    format: dayobs
+    description: Minimum day to use for consDB query.
+    dynamic_default: "-2m"  # Two months ago
+  day_obs_max:
+    type: string
+    format: dayobs
+    description: Maximum day to use for consDB query.
+    dynamic_default: "today"  # Two months ago
+  science_program:
+    type: string
+    description: Science program to use for corner plot.
+    default: 'BLOCK-T614'
+schedule:
+  - freq: "daily"
+    hour: 12 # rerun at 12pm

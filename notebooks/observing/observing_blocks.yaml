@@ -25,11 +25,11 @@ parameters:
   observation_constraint:
     type: string
     description: Observation reason constraint to use for corner plot.
-    default: None
+    default: ''
   target_constraint:
     type: string
     description: Target name constraint to use for corner plot.
-    default: None
+    default: ''
 schedule:
   - freq: "daily"
     hour: 12 # rerun at 12pm

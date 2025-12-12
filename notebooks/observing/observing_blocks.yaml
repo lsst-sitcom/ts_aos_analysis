@@ -18,10 +18,18 @@ parameters:
     format: dayobs
     description: Maximum day to use for consDB query.
     dynamic_default: "today"  # Two months ago
-  science_program:
+  program_constraint:
     type: string
-    description: Science program to use for corner plot.
+    description: Science program constraint to use for corner plot.
     default: 'BLOCK-T614'
+  observation_constraint:
+    type: string
+    description: Observation reason constraint to use for corner plot.
+    default: None
+  target_constraint:
+    type: string
+    description: Target name constraint to use for corner plot.
+    default: None
 schedule:
   - freq: "daily"
     hour: 12 # rerun at 12pm

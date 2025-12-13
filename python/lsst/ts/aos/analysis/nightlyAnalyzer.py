@@ -308,8 +308,8 @@ class NightlyAnalyzer:
 
             # Determine which Zernike coefficients are in table
             zk_table = zk_table[zk_table["label"] == "average"]
-            zk_cols_here = [col for col in zk_table.colnames if col.startswith("Z")]
-            noll_indices_here = [int(col.removeprefix("Z")) for col in zk_cols_here]
+            zk_cols_here = zk_table.meta["opd_columns"]
+            noll_indices_here  = zk_table.meta["noll_indices"]
 
             # Grab Zernike values, convert to dense array, save
             zk_sparse = zk_table[zk_cols_here].to_pandas().values[0]

@@ -25,6 +25,7 @@ import itertools
 
 import numpy as np
 import pandas as pd
+import time
 from lsst.daf.butler import Butler, EmptyQueryResultError
 from lsst.summit.extras.ringssSeeing import RingssSeeingMonitor
 from lsst.summit.utils import (
@@ -64,6 +65,7 @@ class NightlyAnalyzer:
         derotate_zernikes: bool = True,
         fetch_psf: bool = True,
         correct_aos_resid: bool = True,
+        verbose: bool = True
     ) -> None:
         """Create the analyzer
 
@@ -95,6 +97,10 @@ class NightlyAnalyzer:
             Whether to correct the AOS residual using the empirical
             relation corrected = 1.06 * np.log(1 + original).
             The default is True.
+        verbose: bool, optional
+            Whether to show print statements with diagnostics
+            concerning runtime of butler and EFD queries,
+            as well as a summary of all queries.
         """
         # Save params
         self.day_obs = day_obs
@@ -104,6 +110,8 @@ class NightlyAnalyzer:
         self._fetch_psf = fetch_psf
         self._correct_aos_resid = correct_aos_resid
 
+        # Performance monitoring
+        self.verbose = verbose
         if butler is None:
             butler = Butler("LSSTCam", collections="LSSTCam/runs/quickLook")
         self.butler = butler
@@ -115,6 +123,7 @@ class NightlyAnalyzer:
 
         # Create initial database
         self.table = self._fetch(seq_min, seq_max)
+
 
     def _query_consdb(self, seq_min: int, seq_max: int) -> pd.DataFrame:
         """Query ConsDB for the median PSF and airmass
@@ -195,6 +204,7 @@ class NightlyAnalyzer:
 
         return cdb_table
 
+
     def _fetch(self, seq_min: int, seq_max: int) -> pd.DataFrame:
         """Fetch data from the respective databases.
 
@@ -210,7 +220,17 @@ class NightlyAnalyzer:
         pd.DataFrame
             Dataframe of new data.
         """
+        # Initialize timers
+        timers = {
+            "butler_query": 0, "butler_get": 0, "registry": 0,
+            "ringss": 0, "dimm": 0, "rotator": 0,
+            "temp_above": 0, "temp_glass": 0, "zk_parse": 0,
+            "consdb": 0, "derotate": 0,
+        }
+        t_total_start = time.time()
+
         # Get Zernike references from the Butler
+        t0 = time.time()
         try:
             refs = self.butler.query_datasets(
                 "zernikes",
@@ -223,51 +243,67 @@ class NightlyAnalyzer:
         except EmptyQueryResultError:
             return pd.DataFrame()
 
+        refs = list(refs)
+        timers["butler_query"] = time.time() - t0
+        if self.verbose:
+            print(f"[FETCH] Butler query: {timers['butler_query']:.2f}s  ({len(refs)} refs)")
+
+        if len(refs) == 0:
+            return pd.DataFrame()
+
+        # Group refs by seq so that EFD is queried once per seq,
+        # not once per detector
+        refs_by_seq = {}
+        for ref in refs:
+            seq = int(ref.dataId["visit"] - self.day_obs * 1e5)
+            refs_by_seq.setdefault(seq, []).append(ref)
+
+        n_seqs = len(refs_by_seq)
+        if self.verbose:
+            print(f"[FETCH] {len(refs)} refs across {n_seqs} unique seqs "
+                  f"(avg {len(refs)/n_seqs:.1f} detectors/seq)")
+
         # Loop over refs and pull data from Butler
+        noll_indices = np.arange(4, 29)
+        zk_cols = [f"Z{j}" for j in noll_indices]
+
         seqs = []
         detectors = []
-
-        program = []
         bands = []
         ringss = []
         dimm = []
         rotations = []
         glass_temperatures = []
         above_glass_temperatures = []
-        cam_dz = []
-
         zernikes = []
-        noll_indices = np.arange(4, 29)
-        zk_cols = [f"Z{j}" for j in noll_indices]
-        for ref in refs:
-            # Load the Zernike table
-            zk_table = self.butler.get(ref)
+        n_refs = 0
+        n_empty = 0
 
-            # Table is empty if detector had no selected donuts
-            if len(zk_table) == 0:
-                continue
+        for seq_i, (seq, seq_refs) in enumerate(sorted(refs_by_seq.items())):
 
-            # Save ID metadata
-            seqs.append(int(ref.dataId["visit"] - self.day_obs * 1e5))
-            detectors.append(ref.dataId["detector"])
-            bands.append(ref.dataId["physical_filter"])
+            # Get the record for querying EFD (once per seq)
+            first_ref = seq_refs[0]
 
-            # Get the record for querying EFD
+            t0 = time.time()
             rec = list(
                 self.butler.registry.queryDimensionRecords(
                     "exposure",
-                    dataId=ref.dataId,
+                    dataId=first_ref.dataId,
                 )
             )[0]
+            timers["registry"] += time.time() - t0
 
             # Query RINGSS seeing
+            t0 = time.time()
             try:
                 ringss_data = self.seeing_monitor.getSeeingForExpRecord(rec)
-                ringss.append(ringss_data.fwhmSector)
-            except:
-                ringss.append(np.nan)
+                ringss_val = ringss_data.fwhmSector
+            except Exception:
+                ringss_val = np.nan
+            timers["ringss"] += time.time() - t0
 
             # Query DIMM seeing
+            t0 = time.time()
             try:
                 dimm_data = getMostRecentRowWithDataBefore(
                     self.efd_client,
@@ -275,54 +311,103 @@ class NightlyAnalyzer:
                     rec.timespan.end,
                     maxSearchNMinutes=5,
                 )
+                dimm_val = dimm_data["fwhm"]
             except ValueError:
-                dimm.append(np.nan)
-            else:
-                dimm.append(dimm_data["fwhm"])
+                dimm_val = np.nan
+            timers["dimm"] += time.time() - t0
 
             # Grab rotator value from EFD
+            t0 = time.time()
             rot_data = getEfdData(
                 self.efd_client,
                 "lsst.sal.MTRotator.rotation",
                 columns=["actualPosition"],
                 expRecord=rec,
             )
-            rotations.append(rot_data["actualPosition"].mean())
+            rot_val = rot_data["actualPosition"].mean()
+            timers["rotator"] += time.time() - t0
 
-             # Grab temperatures value from EFD
+            # Grab temperatures value from EFD
+            t0 = time.time()
             temp = getEfdData(
                 self.efd_client,
                 "lsst.sal.MTM1M3TS.glycolLoopTemperature",
                 columns=["aboveMirrorTemperature"],
                 expRecord=rec,
             )
-            above_glass_temperatures.append(temp["aboveMirrorTemperature"].mean())
+            above_val = temp["aboveMirrorTemperature"].mean()
+            timers["temp_above"] += time.time() - t0
 
+            t0 = time.time()
             temp = getEfdData(
                 self.efd_client,
                 "lsst.sal.MTM1M3TS.thermalData",
                 columns=["absoluteTemperature45"],
                 expRecord=rec,
             )
-            glass_temperatures.append(temp["absoluteTemperature45"].mean())
+            glass_val = temp["absoluteTemperature45"].mean()
+            timers["temp_glass"] += time.time() - t0
 
-            # Determine which Zernike coefficients are in table
-            zk_table = zk_table[zk_table["label"] == "average"]
-            if ("deviation_columns"  in zk_table.meta) and ("noll_indices" in zk_table.meta):
-                zk_cols_here = zk_table.meta["deviation_columns"]
-                noll_indices_here  = zk_table.meta["noll_indices"]
-            else: # backup for datasets created with ts_wep  prior to introduction of wf deviation in zernikes table
-                zk_cols_here = [col for col in zk_table.colnames if col.startswith("Z")]
-                noll_indices_here = [int(col.removeprefix("Z")) for col in zk_cols_here]
+            # Load Zernike table for each detector in this seq
+            for ref in seq_refs:
+                n_refs += 1
 
-            # Grab Zernike values, convert to dense array, save
-            zk_sparse = zk_table[zk_cols_here].to_pandas().values[0]
-            zk_dense = makeDense(
-                zk_sparse,
-                noll_indices_here,
-                noll_indices.max(),
-            )
-            zernikes.append(zk_dense)
+                t0 = time.time()
+                zk_table = self.butler.get(ref)
+                timers["butler_get"] += time.time() - t0
+
+                # Table is empty if detector had no selected donuts
+                if len(zk_table) == 0:
+                    n_empty += 1
+                    continue
+
+                # Save ID metadata
+                seqs.append(seq)
+                detectors.append(ref.dataId["detector"])
+                bands.append(ref.dataId["physical_filter"])
+
+                # Reuse EFD values (same for all detectors in this seq)
+                ringss.append(ringss_val)
+                dimm.append(dimm_val)
+                rotations.append(rot_val)
+                above_glass_temperatures.append(above_val)
+                glass_temperatures.append(glass_val)
+
+                # Determine which Zernike coefficients are in table
+                t0 = time.time()
+                zk_table = zk_table[zk_table["label"] == "average"]
+                if ("deviation_columns" in zk_table.meta) and ("noll_indices" in zk_table.meta):
+                    zk_cols_here = zk_table.meta["deviation_columns"]
+                    noll_indices_here = zk_table.meta["noll_indices"]
+                else:
+                    # backup for datasets created with ts_wep prior to
+                    # introduction of wf deviation in zernikes table
+                    zk_cols_here = [col for col in zk_table.colnames if col.startswith("Z")]
+                    noll_indices_here = [int(col.removeprefix("Z")) for col in zk_cols_here]
+
+                # Grab Zernike values, convert to dense array, save
+                zk_sparse = zk_table[zk_cols_here].to_pandas().values[0]
+                zk_dense = makeDense(
+                    zk_sparse,
+                    noll_indices_here,
+                    noll_indices.max(),
+                )
+                zernikes.append(zk_dense)
+                timers["zk_parse"] += time.time() - t0
+
+            # Print progress
+            if self.verbose and ((seq_i + 1) % 20 == 0 or seq_i == n_seqs - 1):
+                elapsed = time.time() - t_total_start
+                t_efd_so_far = (timers["ringss"] + timers["dimm"]
+                                + timers["rotator"] + timers["temp_above"]
+                                + timers["temp_glass"])
+                print(
+                    f"[FETCH] seq {seq_i+1}/{n_seqs}  "
+                    f"refs_so_far={n_refs}  "
+                    f"elapsed={elapsed:.1f}s  "
+                    f"(get={timers['butler_get']:.1f}  "
+                    f"efd={t_efd_so_far:.1f})"
+                )
 
         # If no detectors had selected donuts, return empty
         if len(seqs) == 0:
@@ -343,19 +428,23 @@ class NightlyAnalyzer:
         )
 
         # Add ConsDB data to our table
+        t0 = time.time()
         cdb_table = self._query_consdb(seq_min=seq_min, seq_max=seq_max)
+        timers["consdb"] = time.time() - t0
         table = pd.merge(table, cdb_table, how="left", on="seq")
 
         # Convert Zernikes from nm to microns
         zernikes = np.array(zernikes) / 1e3
 
         # Derotate Zernikes to OCS
+        t0 = time.time()
         if self.derotate_zernikes:
             for i, rot in enumerate(table["rotation"]):
                 rot_mat = galsim.zernike.zernikeRotMatrix(
                     noll_indices.max(), -np.deg2rad(rot)
                 )
                 zernikes[i] = zernikes[i] @ rot_mat[4:, 4:]
+        timers["derotate"] = time.time() - t0
 
         # Calculate FWHM Zernike contributions
         zernikes_fwhm = convertZernikesToPsfWidth(zernikes)
@@ -368,57 +457,32 @@ class NightlyAnalyzer:
         # Sort by sequence, then detector
         table = table.sort_values(["seq", "detector"])
 
+        # Print timing report
+        if self.verbose:
+            t_total = time.time() - t_total_start
+            t_efd = (timers["ringss"] + timers["dimm"] + timers["rotator"]
+                     + timers["temp_above"] + timers["temp_glass"])
+            n_good = n_refs - n_empty
+
+            print(f"\n{'='*60}")
+            print("TIMING REPORT")
+            print(f"{'='*60}")
+            print(f"  Total refs: {n_refs}  ({n_empty} empty, {n_good} with data)")
+            print(f"  Unique seqs: {n_seqs}  (EFD queried once per seq)")
+            print(f"  Total time: {t_total:.2f}s")
+            print(f"  {'─'*40}")
+            for key, val in timers.items():
+                pct = 100 * val / t_total if t_total > 0 else 0
+                print(f"  {key:20s}: {val:7.2f}s  ({pct:5.1f}%)")
+            print(f"  {'─'*40}")
+            print(f"  ALL EFD queries     : {t_efd:7.2f}s  ({100*t_efd/t_total:5.1f}%)")
+            if n_seqs > 0:
+                print(f"  Avg per SEQ (EFD)   : {t_efd/n_seqs:.3f}s")
+            if n_good > 0:
+                print(f"  Avg per ref (get)   : {timers['butler_get']/n_good:.3f}s")
+            print(f"{'='*60}")
+
         return table
-
-    def refresh(self) -> None:
-        """Requery for seeing and PSF FWHMs that are NaNs."""
-        # Alias table for brevity below
-        table = self.table
-
-        # First update missing seeing
-        mask = ~np.isfinite(table.ringss_seeing.values.astype(float))
-        for idx in self.table[mask].index:
-            # Unpack ID info
-            seq, detector, band = table.loc[idx, ["seq", "detector", "band"]]
-
-            # Get the exposure record
-            if isinstance(seq, str):
-                print(seq, type(seq))
-            rec = list(
-                self.butler.registry.queryDimensionRecords(
-                    "exposure",
-                    dataId={
-                        "instrument": "LSSTCam",
-                        "detector": detector,
-                        "exposure": self.day_obs * 1e5 + int(seq),
-                    },
-                )
-            )[0]
-
-            # Fill-in new RINGSS data where possible
-            try:
-                ringss_data = self.seeing_monitor.getSeeingForExpRecord(rec)
-                table.loc[idx, "ringss_seeing"] = ringss_data.fwhmSector
-            except:
-                pass
-
-        # Now update missing PSF FWHMs
-        mask = ~np.isfinite(table.psf_fwhm.values.astype(float))
-        if np.sum(mask) > 0:
-            # Query CDB table
-            cdb_table = self._query_consdb(
-                seq_min=self.table[mask].seq.min(),
-                seq_max=self.table[mask].seq.max(),
-            )
-
-            # Merge finite values to replace NaNs
-            # this is a messy block of code!
-            self.table = (
-                table.set_index("seq")
-                .combine_first(cdb_table.set_index("seq"))
-                .reset_index()
-                .set_index(table.index)[table.columns]
-            )
 
     def update(self, verbose: bool = True) -> None:
         """Update the database by grabbing more recent exposures.
@@ -1145,10 +1209,12 @@ class NightlyAnalyzer:
             # Odd Zernikes will get open-face plots
             if j % 2 == 0 or j == 11:
                 ls = "-"
-                facecolor = lambda data: self._detector_colors(group_data)
+                def facecolor(data):
+                    return self._detector_colors(data)
             else:
                 ls = "--"
-                facecolor = lambda data: "none"
+                def facecolor(data):
+                    return "none"
 
             # First scatter bar for each group
             if plot_scatter:

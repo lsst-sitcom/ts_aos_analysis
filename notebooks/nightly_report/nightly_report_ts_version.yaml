@@ -3,6 +3,8 @@ description: Generate a nightly report for the IQ, AOS, Thermal, Aberrations and
 authors:
   - name: Guillem Megias
     slack: gmegias
+  - name: Craig Lage
+    slack: craiglagegit
 tags:
   - lsstcam
   - nightly_report
@@ -20,6 +22,18 @@ parameters:
     type: integer
     description: Maximum sequence number to include in the report.
     default: 900
+  make_detail_plot:
+    type: boolean
+    description: Make detail plot or not
+    default: False
+  detailed_seq_min:
+    type: integer
+    description: Minimum sequence number to include in the detailed report.
+    default: 100
+  detailed_seq_max:
+    type: integer
+    description: Maximum sequence number to include in the detailed report.
+    default: 200
 
 schedule:
   - freq: "daily"

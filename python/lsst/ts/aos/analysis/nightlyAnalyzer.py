@@ -124,7 +124,6 @@ class NightlyAnalyzer:
         # Create initial database
         self.table = self._fetch(seq_min, seq_max)
 
-
     def _query_consdb(self, seq_min: int, seq_max: int) -> pd.DataFrame:
         """Query ConsDB for the median PSF and airmass
 
@@ -203,7 +202,6 @@ class NightlyAnalyzer:
         cdb_table = cdb_table.drop("band", axis=1)
 
         return cdb_table
-
 
     def _fetch(self, seq_min: int, seq_max: int) -> pd.DataFrame:
         """Fetch data from the respective databases.

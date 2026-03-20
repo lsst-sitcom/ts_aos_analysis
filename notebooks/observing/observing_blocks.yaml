@@ -21,7 +21,7 @@ parameters:
   program_constraint:
     type: string
     description: Science program constraint to use for corner plot.
-    default: 'BLOCK-T614'
+    default: 'BLOCK-421'
   observation_constraint:
     type: string
     description: Observation reason constraint to use for corner plot.

@@ -1,0 +1,18 @@
+title: "Nightly AOS USDF Processing"
+description: Generate a daily summary of overnight data runs of AOS data on USDF.
+authors:
+  - name: Bryce Kalmbach
+    slack: brycek
+tags:
+  - lsstcam
+  - aos
+parameters:
+  day_obs:
+    type: string
+    format: dayobs
+    description: Day for the report.
+    dynamic_default: "yesterday"
+
+schedule:
+  - freq: "daily"
+    hour: 12

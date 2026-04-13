@@ -145,3 +145,9 @@ To add additional template variables:
 `nohup bash service.sh > service.sh &`
 
 Based upon service file template here: https://developer.lsst.io/usdf/batch.html#allocatenodes-auto
+
+Once this run is finished. Add it to the appropriate collection in https://rubinobs.atlassian.net/wiki/spaces/LTS/pages/761397307/LSSTCam+AOS+Datasets#%2Frepo%2Fembargo-collections by the following command:
+
+`butler collection-chain embargo $PARENT_COLLECTION $NEW_COLLECTION`
+
+so for instance this would look like: `butler collection-chain embargo aos_fam_danish_triplets u/brycek/aos_data_run/wep/donut_viz/20260411`

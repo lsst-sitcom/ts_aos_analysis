@@ -1,0 +1,16 @@
+day_obs: {{ day_obs }}
+computeSite: s3df
+pipelineYaml: $DONUT_VIZ_DIR/pipelines/production/lsstcam_usdf/lsstCamScienceSensorUSDF_Danish.yaml#step1a-detectors,step1b-visits
+payload:
+  butlerConfig: "/repo/embargo"
+  payloadName: "aos_fam_danish/wep_v16_9_0/donut_viz_v3_6_1/{{ day_obs }}"
+  inCollection: "LSSTCam/defaults,u/gmegias/intrinsic_aberrations_collection_temp"
+  dataQuery: "instrument='LSSTCam' and exposure.observation_type in ('cwfs') and detector.purpose in ('SCIENCE') and exposure.day_obs in ({{ day_obs }}) and band in ('u', 'g', 'r', 'i', 'z', 'y')"
+clusterAlgorithm: lsst.ctrl.bps.quantum_clustering_funcs.dimension_clustering
+cluster:
+  cluster1:
+    pipetasks: isr, generateDonutDirectDetectTask
+    dimensions: detector
+    equalDimensions: exposure:visit
+    partitionDimensions: exposure
+    partitionMaxClusters: 10000

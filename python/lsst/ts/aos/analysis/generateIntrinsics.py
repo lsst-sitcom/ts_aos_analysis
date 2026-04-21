@@ -105,6 +105,11 @@ def process_detector(args) -> str:
     yy = np.linspace(ymin, ymax, N_GRID)
     xx, yy = np.meshgrid(xx, yy)
 
+    R_deg = np.sqrt(xx**2 + yy**2) * (180.0 / np.pi)
+    mask = R_deg <= 1.9
+    xx = xx[mask]
+    yy = yy[mask]
+
     x_flat = xx.ravel()
     y_flat = yy.ravel()
     n_points = x_flat.size
@@ -124,8 +129,7 @@ def process_detector(args) -> str:
                     jmax=JMAX,
                     eps=EPS,
                     nx=NX,
-                )
-                * wavelength
+                ) * wavelength
             )
         except Exception:
             intr[idx, :] = np.nan

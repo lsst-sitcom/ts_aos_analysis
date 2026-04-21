@@ -67,14 +67,12 @@ def init_worker(band: str, telescope_type: str) -> None:
     else:
         fid = batoid.Optic.fromYaml(f"Rubin_v3.12_{band}.yaml")
 
-    _builder_cache = LSSTBuilder(
+    _telescope_cache = LSSTBuilder(
         fid,
         dof_coord_system="OCS",
         flip_m2_bending_modes=False,
         dof_angle_units="degree",
     )
-    for det in tqdm(detectors):
-        _telescope_cache = _builder_cache.build_det(det.getId())
 
 
 def process_detector(args) -> str:
@@ -96,7 +94,7 @@ def process_detector(args) -> str:
     wavelength = band_mapping[band]
 
     global _telescope_cache
-    telescope = _telescope_cache
+    telescope = _telescope_cache.build_det(det_id)
 
     # Build per-detector grid (transpose DVCS -> CCS)
     xmin = min(c.y for c in corners)

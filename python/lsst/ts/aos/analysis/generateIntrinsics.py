@@ -45,10 +45,10 @@ band = "u"
 telescope_type = "asbuilt"
 
 # Grid sampling per detector (n x n points, sampled half a grid length from edges)
-N_GRID = 8
+N_GRID = 50
 
 # Zernike evaluation parameters
-JMAX = 28
+JMAX = 78
 EPS = 0.612
 NX = 63
 PROJECTION = "gnomonic"  # DM's FIELD_ANGLE convention
@@ -65,7 +65,7 @@ def init_worker(band: str, telescope_type: str) -> None:
     if telescope_type == "design":
         fid = batoid.Optic.fromYaml(f"LSST_{band}.yaml")
     else:
-        fid = batoid.Optic.fromYaml(f"Rubin_v3.12_{band}.yaml")
+        fid = batoid.Optic.fromYaml(f"Rubin_v3.14_{band}.yaml")
 
     _telescope_cache = LSSTBuilder(
         fid,
@@ -101,10 +101,8 @@ def process_detector(args) -> str:
     xmax = max(c.y for c in corners)
     ymin = min(c.x for c in corners)
     ymax = max(c.x for c in corners)
-    xx = np.linspace(xmin, xmax, N_GRID + 1)
-    yy = np.linspace(ymin, ymax, N_GRID + 1)
-    xx = 0.5 * (xx[1:] + xx[:-1])  # half a grid length from edges
-    yy = 0.5 * (yy[1:] + yy[:-1])
+    xx = np.linspace(xmin, xmax, N_GRID)
+    yy = np.linspace(ymin, ymax, N_GRID)
     xx, yy = np.meshgrid(xx, yy)
 
     x_flat = xx.ravel()
@@ -128,7 +126,6 @@ def process_detector(args) -> str:
                     nx=NX,
                 )
                 * wavelength
-                * 1e9  # nm
             )
         except Exception:
             intr[idx, :] = np.nan
@@ -137,7 +134,7 @@ def process_detector(args) -> str:
     # Build Table: Z4..ZJMAX
     zidx = np.arange(4, n_coeffs)
     names = ["x", "y"] + [f"Z{j}" for j in zidx]
-    units = [u.rad, u.rad] + [u.nm] * len(zidx)
+    units = [u.rad, u.rad] + [u.m] * len(zidx)
     data = np.column_stack([x_flat, y_flat, intr[:, 4:n_coeffs]])
 
     table = Table(data=data, names=names, units=units)

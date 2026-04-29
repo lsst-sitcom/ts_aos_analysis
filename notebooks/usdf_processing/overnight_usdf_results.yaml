@@ -15,4 +15,4 @@ parameters:
 
 schedule:
   - freq: "daily"
-    hour: 12
+    hour: 9

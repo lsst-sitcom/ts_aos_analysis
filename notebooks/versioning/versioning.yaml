@@ -1,0 +1,23 @@
+title: "Versioning: display software packages information for Summit."
+description: Generate a report containing software packages information for Summit RA processing.
+authors:
+  - name: Chris Suberlak
+    slack: suberlak
+tags:
+  - lsstcam
+  - versioning
+  - aos
+parameters:
+  cscs:
+    type: string
+    format: dayobs
+    description: CSCs (Commandable Service Abstraction Layer Components) to check.
+    default: "MTAOS,MTHexapod,MTM1M3,MTM2,MTMount,MTRotator,MTDome,MTPtg,MTCamera"  # List of CSCs
+  day_obs:
+    type: string
+    format: dayobs
+    description: Day obs to check for database query.
+    dynamic_default: "yesterday"  # Two months ago
+schedule:
+  - freq: "daily"
+    hour: 12 # rerun at 12pm

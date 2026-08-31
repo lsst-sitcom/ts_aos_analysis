@@ -1,7 +1,0 @@
-computeSite: s3df
-pipelineYaml: "$TS_WEP_DIR/pipelines/production/comCamBaselineUSDF_TIE.yaml#step1b,step2"  # if problems, put full path to file
-payload:
-  butlerConfig: "/repo/main"
-  payloadName: "aosBaseline_tie"
-  inCollection: "u/brycek/aosBaseline_step1a"
-  dataQuery: "instrument='LSSTComCam' and exposure.observation_type='cwfs'"

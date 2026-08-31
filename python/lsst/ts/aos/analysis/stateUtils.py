@@ -15,6 +15,18 @@ from lsst_efd_client import EfdClient
 __all__ = ["StateFetcher"]
 
 
+@lru_cache
+def get_m2_bmf():
+    """Get the M2 BendModeToForce object"""
+    return BendModeToForce("M2", OFCData("lsst"))
+
+
+@lru_cache
+def get_m1m3_bmf():
+    """Get the M1M3 BendModeToForce object"""
+    return BendModeToForce("M1M3", OFCData("lsst"))
+
+
 def m2_force_to_bending_mode(force: np.ndarray) -> np.ndarray:
     """Convert M2 forces to bending modes
 
@@ -28,7 +40,7 @@ def m2_force_to_bending_mode(force: np.ndarray) -> np.ndarray:
     bending_mode : `np.ndarray`
         The M2 bending modes in microns.  The shape is (20,)
     """
-    m2_bmf = BendModeToForce("M2", OFCData("lsst"))
+    m2_bmf = get_m2_bmf()
     return m2_bmf.bending_mode(force)
 
 
@@ -45,7 +57,7 @@ def m1m3_force_to_bending_mode(force: np.ndarray) -> np.ndarray:
     bending_mode : `np.ndarray`
         The M1M3 bending modes in microns.  The shape is (20,)
     """
-    m1m3_bmf = BendModeToForce("M1M3", OFCData("lsst"))
+    m1m3_bmf = get_m1m3_bmf()
     return m1m3_bmf.bending_mode(force)
 
 

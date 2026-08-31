@@ -1,0 +1,33 @@
+title: "CLT-006-ComCam: 15 vs 30 second exposures"
+description: Validate the closed loop works for 15 second exposures just as well as for 30 seconds.
+authors:
+  - name: Bryce Kalmbach
+    slack: brycek
+tags:
+  - comcam
+  - CLT
+parameters:
+  collection_name:
+    type: string
+    description: Butler collection.
+    default: 'u/brycek/aosRefitWcs_danish_singleBlends_80pxMinSep'
+  day_obs:
+    type: integer
+    description: Exposure day_obs value from visitInfo.
+    default: 20241118
+  min_seq_num_15_sec:
+    type: integer
+    description: Starting Sequence Number for 15 second closed loop run.
+    default: 31
+  max_seq_num_15_sec:
+    type: integer
+    description: Ending Sequence Number for 15 second closed loop run.
+    default: 53
+  min_seq_num_30_sec:
+    type: integer
+    description: Starting Sequence Number for 30 second closed loop run.
+    default: 54
+  max_seq_num_30_sec:
+    type: integer
+    description: Ending Sequence Number for 30 second closed loop run.
+    default: 75
